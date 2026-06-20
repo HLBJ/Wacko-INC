@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wacko Inc OS</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <p class="eyebrow">Local AI Company</p>
+      <h1>Wacko Inc OS</h1>
+    </div>
+    <nav>
+      <a href="#projects">Projects</a>
+      <a href="#tasks">Tasks</a>
+      <a href="#agents">Agents</a>
+      <a href="#approvals">Approvals</a>
+      <a href="#runs">Runs</a>
+    </nav>
+  </aside>
+
+  <main>
+    <section class="topbar">
+      <div>
+        <h2>CEO Control Panel</h2>
+        <p>Give the Manager a goal, then review and approve the company output.</p>
+      </div>
+      <button id="refreshButton" type="button">Refresh</button>
+    </section>
+
+    <section class="panel status-panel">
+      <h3>Local Model Status</h3>
+      <p id="ollamaStatus" class="meta">Checking Ollama...</p>
+    </section>
+
+    <section id="goal" class="panel goal-panel">
+      <form id="goalForm">
+        <h3>Give Manager a Goal</h3>
+        <label>
+          Company goal
+          <textarea name="goal" rows="5" required placeholder="Build a SaaS app that helps small businesses manage customer appointments, payments, and reminders."></textarea>
+        </label>
+        <label class="check">
+          <input name="auto_start" type="checkbox" checked>
+          Automatically start specialist agents after planning
+        </label>
+        <div class="actions">
+          <button type="submit">Start Company Workflow</button>
+          <span id="goalStatus" class="meta"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="projects" class="grid two">
+      <form id="projectForm" class="panel">
+        <h3>Manual Project</h3>
+        <label>
+          Name
+          <input name="name" required placeholder="Customer portal">
+        </label>
+        <label>
+          Description
+          <textarea name="description" rows="4" placeholder="What should the AI company build?"></textarea>
+        </label>
+        <button type="submit">Create Project</button>
+      </form>
+
+      <div class="panel">
+        <h3>Projects</h3>
+        <div id="projectsList" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="tasks" class="grid two">
+      <form id="taskForm" class="panel">
+        <h3>Manual Task</h3>
+        <label>
+          Project
+          <select name="project_id" required></select>
+        </label>
+        <label>
+          Title
+          <input name="title" required placeholder="Design login flow">
+        </label>
+        <label>
+          Agent
+          <select name="assigned_agent"></select>
+        </label>
+        <label>
+          Priority
+          <select name="priority">
+            <option>MEDIUM</option>
+            <option>HIGH</option>
+            <option>LOW</option>
+          </select>
+        </label>
+        <label class="check">
+          <input name="requires_approval" type="checkbox" checked>
+          Requires CEO approval
+        </label>
+        <label>
+          Details
+          <textarea name="description" rows="5" placeholder="Acceptance criteria, constraints, context"></textarea>
+        </label>
+        <button type="submit">Create Task</button>
+      </form>
+
+      <div class="panel">
+        <h3>Tasks</h3>
+        <div id="tasksList" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="agents" class="panel">
+      <h3>Agent Workforce</h3>
+      <div id="agentsList" class="agent-grid"></div>
+    </section>
+
+    <section id="approvals" class="panel">
+      <h3>Approval Queue</h3>
+      <div id="approvalsList" class="stack"></div>
+    </section>
+
+    <section id="runs" class="panel">
+      <h3>Agent Runs</h3>
+      <div id="runsList" class="stack"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
