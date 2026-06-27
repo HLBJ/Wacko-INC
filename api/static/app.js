@@ -140,6 +140,9 @@ const renderRuns = () => {
           <span class="badge">${escapeHtml(run.status)}</span>
           ${new Date(run.created_at).toLocaleString()}
         </p>
+        ${run.output_file
+          ? `<p class="meta" style="word-break:break-all">📁 <strong>Output file:</strong> ${escapeHtml(run.output_file)}</p>`
+          : ""}
         <pre>${escapeHtml(run.output_text || "Still running or no output yet.")}</pre>
       </article>
     `).join("")
@@ -188,14 +191,25 @@ document.querySelector("#goalForm").addEventListener("submit", async (event) => 
   event.preventDefault();
   const status = document.querySelector("#goalStatus");
   const data = formData(event.currentTarget);
-  data.auto_start = event.currentTarget.auto_start.checked;
+
+  // Pass output_dir only when the user actually typed something
+  const output_dir = data.output_dir && data.output_dir.trim() ? data.output_dir.trim() : null;
+
+  const payload = {
+    goal: data.goal,
+    auto_start: event.currentTarget.auto_start.checked,
+    output_dir,
+  };
+
   status.textContent = "Manager is planning the company workflow...";
 
   try {
-    const result = await api("/api/goals", { method: "POST", body: JSON.stringify(data) });
+    const result = await api("/api/goals", { method: "POST", body: JSON.stringify(payload) });
     event.currentTarget.reset();
     event.currentTarget.auto_start.checked = true;
-    status.textContent = `Created project #${result.project.id} and ${result.tasks.length} specialist tasks.`;
+
+    const dir = output_dir || `C:/Projects/${result.project?.name ?? ""}`;
+    status.textContent = `Created project #${result.project.id} with ${result.tasks.length} tasks. Files → ${dir}`;
     await refresh();
   } catch (error) {
     status.textContent = error.message;

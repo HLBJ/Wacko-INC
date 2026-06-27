@@ -25,3 +25,9 @@ class ApprovalDecision(BaseModel):
 class CompanyGoalCreate(BaseModel):
     goal: str
     auto_start: bool = True
+    output_dir: Optional[str] = None
+    """
+    Directory where agent output files will be written.
+    Defaults to C:/Projects/<project_name> when omitted.
+    You can also set OUTPUT_BASE_DIR in your .env to change the base globally.
+    """

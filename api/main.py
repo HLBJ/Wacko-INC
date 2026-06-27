@@ -72,12 +72,17 @@ def list_projects():
 
 @app.post("/api/goals")
 def submit_goal(payload: CompanyGoalCreate, background_tasks: BackgroundTasks):
-    result = submit_company_goal(payload.goal, auto_start=True)
+    result = submit_company_goal(
+        payload.goal,
+        auto_start=payload.auto_start,
+        output_dir=payload.output_dir,  # None → defaults to C:/Projects/<project_name>
+    )
     if payload.auto_start:
         background_tasks.add_task(
             run_project_tasks,
             result["project"].id,
-            {result["planning_task"].id}
+            {result["planning_task"].id},
+            payload.output_dir,
         )
         result["auto_started"] = True
     return result
@@ -91,7 +96,7 @@ def create_task(payload: TaskCreate):
         description=payload.description,
         assigned_agent=payload.assigned_agent,
         priority=payload.priority,
-        requires_approval=payload.requires_approval
+        requires_approval=payload.requires_approval,
     )
 
 
@@ -102,10 +107,10 @@ def list_tasks(project_id: int | None = None):
 
 @app.post("/api/tasks/{task_id}/run")
 def run_agent_task(task_id: int):
-    run = run_task(task_id)
-    if run is None:
+    result = run_task(task_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return run
+    return result
 
 
 @app.post("/api/projects/{project_id}/run")

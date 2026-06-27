@@ -47,7 +47,7 @@ DEFAULT_TASKS = [
 ]
 
 
-def submit_company_goal(goal, auto_start=True):
+def submit_company_goal(goal: str, auto_start: bool = True, output_dir: str | None = None) -> dict:
     plan = create_manager_plan(goal)
     project = ProjectService.create_project(plan["project_name"], plan["project_description"])
 
@@ -82,7 +82,7 @@ def submit_company_goal(goal, auto_start=True):
         created_tasks.append(task)
 
     if auto_start:
-        run_project_tasks(project.id, skip_task_ids={planning_task.id})
+        run_project_tasks(project.id, skip_task_ids={planning_task.id}, output_dir=output_dir)
 
     return {
         "project": project,
@@ -92,7 +92,7 @@ def submit_company_goal(goal, auto_start=True):
     }
 
 
-def create_manager_plan(goal):
+def create_manager_plan(goal: str) -> dict:
     prompt = f"""
 You are the Manager Agent for Wacko Inc, a local AI software development company.
 
@@ -133,7 +133,7 @@ Rules:
     return normalize_plan(goal, parsed)
 
 
-def parse_json_plan(output):
+def parse_json_plan(output: str) -> dict | None:
     if output.startswith("LOCAL_MODEL_"):
         return None
 
@@ -153,7 +153,7 @@ def parse_json_plan(output):
     return None
 
 
-def normalize_plan(goal, plan):
+def normalize_plan(goal: str, plan: dict) -> dict:
     tasks = plan.get("tasks") or []
     normalized_tasks = []
     valid_agents = {"manager", "frontend", "backend", "database", "security", "testing", "marketing", "support"}
@@ -188,7 +188,7 @@ def normalize_plan(goal, plan):
     }
 
 
-def fallback_plan(goal, manager_output):
+def fallback_plan(goal: str, manager_output: str) -> dict:
     summary = (
         "The Manager could not return a structured plan from the local model, "
         "so Wacko Inc created a standard software delivery workflow."
@@ -204,7 +204,11 @@ def fallback_plan(goal, manager_output):
     }
 
 
-def run_project_tasks(project_id, skip_task_ids=None):
+def run_project_tasks(
+    project_id: int,
+    skip_task_ids: set | None = None,
+    output_dir: str | None = None,
+) -> list[dict]:
     skip_task_ids = skip_task_ids or set()
     tasks = TaskService.list_tasks(project_id)
     runnable = [
@@ -217,5 +221,7 @@ def run_project_tasks(project_id, skip_task_ids=None):
 
     results = []
     for task in runnable:
-        results.append(run_task(task.id))
+        result = run_task(task.id, output_dir=output_dir)
+        if result is not None:
+            results.append(result)
     return results
