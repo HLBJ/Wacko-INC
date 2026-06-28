@@ -1,17 +1,13 @@
-from llm import model_for, run_model
+from services.ai_gateway import generate_file_change_response
 
 def developer_agent(task: str) -> str:
-    prompt = f"""
-You are a senior .NET/Python software engineer.
-
-You must implement the following task:
-
-{task}
-
-Rules:
-- Write production-ready code
-- Include file structure
-- Include explanation
-"""
-
-    return run_model(model_for("developer", "qwen2.5-coder:3b"), prompt)
+    lowered = task.lower()
+    if "frontend agent" in lowered:
+        role = "frontend"
+    elif "database agent" in lowered:
+        role = "database"
+    elif "backend agent" in lowered:
+        role = "backend"
+    else:
+        role = "developer"
+    return generate_file_change_response(role, task)

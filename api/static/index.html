@@ -14,7 +14,16 @@
     </div>
     <nav>
       <a href="#projects">Projects</a>
+      <a href="#commandCenter">Command</a>
       <a href="#tasks">Tasks</a>
+      <a href="#files">Files</a>
+      <a href="#quality">Quality</a>
+      <a href="#security">Security</a>
+      <a href="#builds">Builds</a>
+      <a href="#git">Git</a>
+      <a href="#jobs">Jobs</a>
+      <a href="#settings">Settings</a>
+      <a href="#support">Support</a>
       <a href="#agents">Agents</a>
       <a href="#approvals">Approvals</a>
       <a href="#runs">Runs</a>
@@ -27,12 +36,16 @@
         <h2>CEO Control Panel</h2>
         <p>Give the Manager a goal, then review and approve the company output.</p>
       </div>
-      <button id="refreshButton" type="button">Refresh</button>
+      <div class="topbar-actions">
+        <button id="refreshButton" type="button">Refresh</button>
+        <button id="clearDatabaseButton" class="danger" type="button">Clear DB</button>
+      </div>
     </section>
 
     <section class="panel status-panel">
       <h3>Local Model Status</h3>
       <p id="ollamaStatus" class="meta">Checking Ollama...</p>
+      <p id="gatewayStatus" class="meta">Checking AI gateway...</p>
     </section>
 
     <section id="goal" class="panel goal-panel">
@@ -43,8 +56,14 @@
           <textarea name="goal" rows="5" required placeholder="Build a SaaS app that helps small businesses manage customer appointments, payments, and reminders."></textarea>
         </label>
         <label>
-          Output directory <span class="meta" style="font-weight:400">(optional — where agent files are written)</span>
-          <input name="output_dir" type="text" placeholder="C:/Projects/MyProject  (leave blank for default)">
+          Output directory <span class="meta" style="font-weight:400">(optional - where agent files are written)</span>
+          <input name="output_dir" type="text" placeholder="C:/Project/MyProject  (leave blank for default)">
+        </label>
+        <label>
+          Project template
+          <select name="stack" id="stackSelect">
+            <option value="auto">Auto Select</option>
+          </select>
         </label>
         <label class="check">
           <input name="auto_start" type="checkbox" checked>
@@ -53,6 +72,67 @@
         <div class="actions">
           <button type="submit">Start Company Workflow</button>
           <span id="goalStatus" class="meta"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="progressTracker" class="panel progress-panel">
+      <h3>Live Task Progress</h3>
+      <p class="meta">Loading task progress...</p>
+    </section>
+
+    <section id="commandCenter" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Project Command Center</h3>
+          <p class="meta">Choose a project, inspect readiness, and run the next workflow.</p>
+        </div>
+        <div class="file-controls">
+          <select id="commandProjectSelect" aria-label="Command center project"></select>
+          <label class="compact-control inline-control">
+            Max cycles
+            <input id="maxAutopilotCycles" type="number" min="1" max="25" value="8">
+          </label>
+          <button id="loadCommandProjectButton" type="button" class="secondary">Load</button>
+        </div>
+      </div>
+      <div id="commandOverview" class="stack">
+        <p class="meta">Create or select a project to open the command center.</p>
+      </div>
+      <div class="actions command-actions">
+        <button type="button" onclick="runCommandWorkflow('autopilot')">Autopilot</button>
+        <button type="button" onclick="runCommandWorkflow('auto_next')">Auto Next Step</button>
+        <button type="button" onclick="runCommandWorkflow('full_cycle')">Full Cycle</button>
+        <button type="button" onclick="runCommandWorkflow('run_agents')">Run Agents</button>
+        <button type="button" onclick="runCommandWorkflow('build_until_pass')">Build Until Pass</button>
+        <button type="button" class="secondary" onclick="runCommandWorkflow('refresh_architecture')">Refresh Architecture</button>
+        <button type="button" class="secondary" onclick="runCommandWorkflow('health_check')">Quality + Security</button>
+        <button type="button" class="secondary" onclick="runCommandWorkflow('release_check')">Release Check</button>
+        <button type="button" class="secondary" onclick="loadCeoReport()">CEO Report</button>
+        <button type="button" class="secondary" onclick="saveCeoReport()">Save Report</button>
+      </div>
+      <p id="commandStatus" class="meta"></p>
+      <pre id="ceoReportPanel" class="report-panel"></pre>
+    </section>
+
+    <section id="projectUpdate" class="panel goal-panel">
+      <form id="updateProjectForm">
+        <h3>Study / Update Existing Project</h3>
+        <label>
+          Project path
+          <input name="project_path" type="text" required placeholder="C:/Project/{Project_Name}">
+        </label>
+        <label>
+          Changes or questions for the agents
+          <textarea name="instructions" rows="5" required placeholder="Study this project and add my requested changes. Update the actual files in this folder."></textarea>
+        </label>
+        <label class="check">
+          <input name="auto_start" type="checkbox" checked>
+          Automatically start agents after planning
+        </label>
+        <div class="actions">
+          <button type="submit">Study and Update Project</button>
+          <span id="updateStatus" class="meta"></span>
         </div>
       </form>
     </section>
@@ -67,6 +147,10 @@
         <label>
           Description
           <textarea name="description" rows="4" placeholder="What should the AI company build?"></textarea>
+        </label>
+        <label>
+          Project path
+          <input name="project_path" placeholder="C:/Project/MyProject">
         </label>
         <button type="submit">Create Project</button>
       </form>
@@ -117,6 +201,148 @@
       </div>
     </section>
 
+    <section id="files" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Project Files</h3>
+          <p class="meta">Inspect generated project files and agent notes.</p>
+        </div>
+        <div class="file-controls">
+          <select id="fileProjectSelect" aria-label="Project files"></select>
+          <button id="loadFilesButton" type="button" class="secondary">Browse Files</button>
+        </div>
+      </div>
+      <div class="file-browser">
+        <div id="fileTree" class="file-tree">
+          <p class="meta">Choose a project and browse files.</p>
+        </div>
+        <div class="file-preview">
+          <div class="file-preview-head">
+            <strong id="filePreviewTitle">No file selected</strong>
+            <span id="filePreviewMeta" class="meta"></span>
+          </div>
+          <pre id="filePreviewContent">Select a readable text file to preview it.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="quality" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Quality Review</h3>
+          <p class="meta">Run deterministic checks before approving agent work.</p>
+        </div>
+        <div class="file-controls">
+          <select id="qualityProjectSelect" aria-label="Quality project"></select>
+          <button id="runQualityButton" type="button" class="secondary">Run Review</button>
+        </div>
+      </div>
+      <div id="qualityReviewPanel" class="stack">
+        <p class="meta">Choose a project and run a quality review.</p>
+      </div>
+    </section>
+
+    <section id="security" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Security Review</h3>
+          <p class="meta">Scan for secrets, hardcoded credentials, risky config, and suspicious dependencies.</p>
+        </div>
+        <div class="file-controls">
+          <select id="securityProjectSelect" aria-label="Security project"></select>
+          <button id="runSecurityButton" type="button" class="secondary">Run Security</button>
+        </div>
+      </div>
+      <div id="securityReviewPanel" class="stack">
+        <p class="meta">Choose a project and run a security review.</p>
+      </div>
+    </section>
+
+    <section id="builds" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Build / Test Runs</h3>
+          <p class="meta">Builds run without command timeouts and can auto-repair failed projects.</p>
+        </div>
+        <label class="compact-control">
+          Max fix attempts
+          <input id="maxFixAttempts" type="number" min="1" max="25" value="3">
+        </label>
+      </div>
+      <div id="buildRunsList" class="stack"></div>
+    </section>
+
+    <section id="git" class="panel">
+      <h3>Change Review</h3>
+      <div id="gitStatusPanel" class="stack">
+        <p class="meta">Run Git Status on a project to inspect changes.</p>
+      </div>
+    </section>
+
+    <section id="jobs" class="panel">
+      <h3>Jobs</h3>
+      <div id="jobsList" class="stack"></div>
+    </section>
+
+    <section id="settings" class="panel">
+      <form id="settingsForm">
+        <h3>Company Settings</h3>
+        <div class="settings-grid">
+          <label>
+            Output base directory
+            <input name="output_base_dir" type="text" placeholder="C:/Project">
+          </label>
+          <label>
+            Max fix attempts
+            <input name="max_fix_attempts" type="number" min="1" max="25">
+          </label>
+          <label>
+            Max autopilot cycles
+            <input name="max_autopilot_cycles" type="number" min="1" max="25">
+          </label>
+          <label class="check">
+            <input name="local_only" type="checkbox">
+            Local AI only
+          </label>
+          <label class="check">
+            <input name="auto_save_ceo_reports" type="checkbox">
+            Auto-save CEO reports
+          </label>
+        </div>
+        <div class="actions">
+          <button type="submit">Save Settings</button>
+          <span id="settingsStatus" class="meta"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="support" class="grid two">
+      <form id="supportTicketForm" class="panel">
+        <h3>Support Inbox</h3>
+        <label>
+          Project
+          <select name="project_id"></select>
+        </label>
+        <label>
+          Sender email
+          <input name="sender_email" type="email" placeholder="customer@example.com">
+        </label>
+        <label>
+          Subject
+          <input name="subject" required placeholder="Login error">
+        </label>
+        <label>
+          Message
+          <textarea name="body" rows="5" required placeholder="Customer support message"></textarea>
+        </label>
+        <button type="submit">Create Ticket</button>
+      </form>
+      <div class="panel">
+        <h3>Support Tickets</h3>
+        <div id="supportTicketsList" class="stack"></div>
+      </div>
+    </section>
+
     <section id="agents" class="panel">
       <h3>Agent Workforce</h3>
       <div id="agentsList" class="agent-grid"></div>
@@ -125,6 +351,13 @@
     <section id="approvals" class="panel">
       <h3>Approval Queue</h3>
       <div id="approvalsList" class="stack"></div>
+    </section>
+
+    <section id="approvalReview" class="panel">
+      <h3>Approval Review</h3>
+      <div id="approvalReviewPanel" class="stack">
+        <p class="meta">Open an approval review to inspect changes before deciding.</p>
+      </div>
     </section>
 
     <section id="runs" class="panel">

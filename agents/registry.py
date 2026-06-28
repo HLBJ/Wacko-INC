@@ -1,6 +1,8 @@
 from agents.developer.developer import developer_agent
 from agents.manager.manager import manager_agent
 from agents.reviewer.reviewer import reviewer_agent
+from agents.security.security import security_agent
+from agents.testing.testing import testing_agent
 
 
 AGENT_PROFILES = {
@@ -35,15 +37,15 @@ AGENT_PROFILES = {
     },
     "security": {
         "name": "Security Agent",
-        "description": "Reviews security risks, dependencies, secrets, privacy, and attack surface.",
+        "description": "Reviews and fixes security risks, dependencies, secrets, privacy, and attack surface.",
         "capabilities": ["Code scanning", "Dependency audits", "Secrets detection", "Privacy reviews"],
-        "handler": reviewer_agent
+        "handler": security_agent
     },
     "testing": {
         "name": "Testing Agent",
-        "description": "Plans and reviews unit, integration, UI, regression, and performance tests.",
+        "description": "Creates and updates unit, integration, UI, regression, and performance tests.",
         "capabilities": ["Unit tests", "Integration tests", "UI tests", "Regression tests"],
-        "handler": reviewer_agent
+        "handler": testing_agent
     },
     "marketing": {
         "name": "Marketing Agent",

@@ -1,6 +1,5 @@
-from database.db import engine, Base
-import database.models  # noqa
+from database.schema import ensure_schema
 
-Base.metadata.create_all(bind=engine)
+ensure_schema()
 
 print("Database created")

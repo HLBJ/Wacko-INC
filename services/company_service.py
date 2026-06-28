@@ -1,9 +1,13 @@
 import json
 import re
+from pathlib import Path
 
 from llm import model_for, run_model
+from services.architecture_contract import contract_for_stack, detect_stack_from_path, write_contract
 from services.orchestrator import run_task
 from services.project_service import ProjectService
+from services.project_reader import format_project_context, read_project_context
+from services.project_templates import seed_project_template, template_for
 from services.task_service import TaskService
 
 
@@ -47,14 +51,24 @@ DEFAULT_TASKS = [
 ]
 
 
-def submit_company_goal(goal: str, auto_start: bool = True, output_dir: str | None = None) -> dict:
-    plan = create_manager_plan(goal)
-    project = ProjectService.create_project(plan["project_name"], plan["project_description"])
+def submit_company_goal(
+    goal: str,
+    auto_start: bool = True,
+    output_dir: str | None = None,
+    stack: str = "auto",
+) -> dict:
+    plan = create_manager_plan(goal, stack)
+    template_result = seed_project_template(plan["project_name"], goal, stack, output_dir)
+    project = ProjectService.create_project(
+        plan["project_name"],
+        plan["project_description"],
+        project_path=template_result["project_dir"],
+    )
 
     planning_task = TaskService.create_task(
         project.id,
         "Manager project plan",
-        plan["manager_summary"],
+        f"{plan['manager_summary']}\n\nTemplate:\n{json.dumps(template_result, indent=2)}",
         assigned_agent="manager",
         priority="HIGH",
         requires_approval=True,
@@ -71,10 +85,16 @@ def submit_company_goal(goal: str, auto_start: bool = True, output_dir: str | No
 
     created_tasks = []
     for task_data in plan["tasks"]:
+        description = (
+            f"{task_data['description']}\n\n"
+            f"Project directory:\n{template_result['project_dir']}\n\n"
+            f"Selected stack/template:\n{template_result['template_name']} ({template_result['stack']})\n\n"
+            "Update or create files in this project. Keep paths relative to the project root."
+        )
         task = TaskService.create_task(
             project.id,
             task_data["title"],
-            task_data["description"],
+            description,
             assigned_agent=task_data["assigned_agent"],
             priority=task_data.get("priority", "MEDIUM"),
             requires_approval=True,
@@ -88,11 +108,82 @@ def submit_company_goal(goal: str, auto_start: bool = True, output_dir: str | No
         "project": project,
         "planning_task": planning_task,
         "tasks": created_tasks,
+        "template": template_result,
         "auto_started": auto_start,
     }
 
 
-def create_manager_plan(goal: str) -> dict:
+def submit_project_update(
+    project_path: str,
+    instructions: str,
+    auto_start: bool = True,
+) -> dict:
+    context = read_project_context(project_path)
+    plan = create_update_plan(instructions, context)
+
+    project = ProjectService.create_project(
+        plan["project_name"],
+        f"Update existing project at {context['root']}. {plan['project_description']}",
+        project_path=context["root"],
+    )
+    detected_stack = detect_stack_from_path(context["root"])
+    write_contract(
+        context["root"],
+        contract_for_stack(plan["project_name"], detected_stack, instructions),
+    )
+
+    planning_task = TaskService.create_task(
+        project.id,
+        "Manager update plan",
+        plan["manager_summary"],
+        assigned_agent="manager",
+        priority="HIGH",
+        requires_approval=True,
+    )
+
+    planning_run = TaskService.create_run(planning_task.id, "manager", instructions)
+    TaskService.complete_run(planning_run.id, json.dumps(plan, indent=2), "COMPLETED")
+    TaskService.update_status(planning_task.id, "AWAITING_APPROVAL")
+    TaskService.create_approval(
+        planning_task.id,
+        "Approve manager update plan",
+        "Review the Manager's generated update plan before treating the plan as accepted.",
+    )
+
+    created_tasks = []
+    project_context = format_project_context(context)
+    for task_data in plan["tasks"]:
+        description = (
+            f"{task_data['description']}\n\n"
+            f"CEO update request:\n{instructions}\n\n"
+            "Existing project context:\n"
+            f"{project_context}\n\n"
+            "Write updated project files. Only include files that should be created or changed."
+        )
+        task = TaskService.create_task(
+            project.id,
+            task_data["title"],
+            description,
+            assigned_agent=task_data["assigned_agent"],
+            priority=task_data.get("priority", "MEDIUM"),
+            requires_approval=True,
+        )
+        created_tasks.append(task)
+
+    if auto_start:
+        run_project_tasks(project.id, skip_task_ids={planning_task.id}, output_dir=context["root"])
+
+    return {
+        "project": project,
+        "planning_task": planning_task,
+        "tasks": created_tasks,
+        "project_path": context["root"],
+        "auto_started": auto_start,
+    }
+
+
+def create_manager_plan(goal: str, stack: str = "auto") -> dict:
+    template_key, template = template_for(stack)
     prompt = f"""
 You are the Manager Agent for Wacko Inc, a local AI software development company.
 
@@ -100,6 +191,12 @@ The CEO gives you one goal. Your job is to create the project and delegate work 
 
 CEO goal:
 {goal}
+
+Requested stack/template:
+{template["name"]} ({template_key})
+
+Template description:
+{template["description"]}
 
 Return only valid JSON. Do not include markdown fences or commentary.
 
@@ -123,6 +220,10 @@ Rules:
 - Assign each task to the best specialist agent.
 - Include security and testing tasks for software projects.
 - Include marketing/support tasks only when relevant.
+- Implementation tasks must update the seeded project structure instead of inventing unrelated folders.
+- Assign backend API, email, database, authentication, and third-party integration work to backend or database agents, not frontend.
+- Assign frontend only when the task creates or changes actual UI/client files.
+- Avoid multiple agents rewriting the same shared file unless the task says how their changes should fit together.
 - Do not ask the CEO to manually create tasks.
 """
 
@@ -131,6 +232,77 @@ Rules:
     if parsed is None:
         return fallback_plan(goal, output)
     return normalize_plan(goal, parsed)
+
+
+def create_update_plan(instructions: str, context: dict) -> dict:
+    prompt = f"""
+You are the Manager Agent for Wacko Inc.
+
+The CEO wants the agents to study and update an existing project.
+
+CEO update request:
+{instructions}
+
+Existing project:
+{format_project_context(context)}
+
+Return only valid JSON. Do not include markdown fences or commentary.
+
+Schema:
+{{
+  "project_name": "{Path(context['root']).name}",
+  "project_description": "one paragraph",
+  "manager_summary": "what you understood and how the agents will update the project",
+  "tasks": [
+    {{
+      "title": "task title",
+      "description": "clear update task details and acceptance criteria",
+      "assigned_agent": "manager|frontend|backend|database|security|testing|marketing|support",
+      "priority": "HIGH|MEDIUM|LOW"
+    }}
+  ]
+}}
+
+Rules:
+- Prefer update tasks over greenfield creation tasks.
+- Assign implementation changes to frontend, backend, or database agents.
+- Include testing and security review tasks when code changes are requested.
+- Each implementation task must tell the agent to write changed files with relative paths.
+- Do not ask the CEO to manually create tasks.
+"""
+
+    output = run_model(model_for("manager", "qwen2.5:3b"), prompt)
+    parsed = parse_json_plan(output)
+    if parsed is None:
+        return normalize_plan(
+            instructions,
+            {
+                "project_name": Path(context["root"]).name,
+                "project_description": f"Update existing project at {context['root']}.",
+                "manager_summary": "Created a fallback update plan because the Manager did not return structured JSON.",
+                "tasks": [
+                    {
+                        "title": "Study existing project and implement requested changes",
+                        "description": "Review the provided project context, then update the files needed for the CEO request.",
+                        "assigned_agent": "backend",
+                        "priority": "HIGH",
+                    },
+                    {
+                        "title": "Review updated project quality and security",
+                        "description": "Review the planned changes for correctness, security, and missing tests.",
+                        "assigned_agent": "security",
+                        "priority": "HIGH",
+                    },
+                    {
+                        "title": "Create or update tests",
+                        "description": "Create or update tests for the requested project changes.",
+                        "assigned_agent": "testing",
+                        "priority": "MEDIUM",
+                    },
+                ],
+            },
+        )
+    return normalize_plan(instructions, parsed)
 
 
 def parse_json_plan(output: str) -> dict | None:

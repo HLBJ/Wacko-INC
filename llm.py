@@ -71,3 +71,50 @@ def ollama_health() -> dict:
             "base_url": OLLAMA_BASE_URL,
             "error": str(exc)
         }
+
+
+def model_preflight(required_roles: list[str] | None = None) -> dict:
+    roles = required_roles or ["manager", "developer", "reviewer", "security", "testing"]
+    fallbacks = {
+        "manager": "qwen2.5:3b",
+        "developer": "qwen2.5-coder:3b",
+        "reviewer": "qwen2.5:3b",
+        "security": "qwen2.5-coder:3b",
+        "testing": "qwen2.5-coder:3b",
+    }
+    required_models = {
+        role: model_for(role, fallbacks.get(role, "qwen2.5-coder:3b"))
+        for role in roles
+    }
+
+    health = ollama_health()
+    if not health.get("ok"):
+        return {
+            "ok": False,
+            "code": "LOCAL_MODEL_UNAVAILABLE",
+            "message": f"Ollama could not be reached at {OLLAMA_BASE_URL}.",
+            "health": health,
+            "required_models": required_models,
+            "missing_models": sorted(set(required_models.values())),
+        }
+
+    installed = set(health.get("models", []))
+    missing = sorted({model for model in required_models.values() if model not in installed})
+    if missing:
+        return {
+            "ok": False,
+            "code": "LOCAL_MODEL_MISSING",
+            "message": "Ollama is running, but one or more configured models are not installed.",
+            "health": health,
+            "required_models": required_models,
+            "missing_models": missing,
+        }
+
+    return {
+        "ok": True,
+        "code": "LOCAL_MODEL_READY",
+        "message": "Ollama is reachable and required models are installed.",
+        "health": health,
+        "required_models": required_models,
+        "missing_models": [],
+    }

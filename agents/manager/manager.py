@@ -15,6 +15,7 @@ Output format:
 - Requirements
 - Task List (numbered)
 - Risks
+- File-producing tasks should tell specialist agents which files they must create
 """
 
     return run_model(model_for("manager", "qwen2.5:3b"), prompt)

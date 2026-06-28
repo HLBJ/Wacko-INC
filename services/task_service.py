@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from database.db import SessionLocal
@@ -58,14 +59,15 @@ class TaskService:
             db.close()
 
     @staticmethod
-    def create_run(task_id, agent_name, input_text):
+    def create_run(task_id, agent_name, input_text, branch_name=""):
         db = SessionLocal()
         try:
             run = AgentRun(
                 task_id=task_id,
                 agent_name=agent_name,
                 status="RUNNING",
-                input_text=input_text
+                input_text=input_text,
+                branch_name=branch_name
             )
             db.add(run)
             db.commit()
@@ -75,7 +77,21 @@ class TaskService:
             db.close()
 
     @staticmethod
-    def complete_run(run_id, output_text, status="COMPLETED"):
+    def update_branch(task_id, branch_name):
+        db = SessionLocal()
+        try:
+            task = db.query(Task).filter(Task.id == task_id).first()
+            if task is None:
+                return None
+            task.branch_name = branch_name
+            db.commit()
+            db.refresh(task)
+            return task
+        finally:
+            db.close()
+
+    @staticmethod
+    def complete_run(run_id, output_text, status="COMPLETED", output_file=None, output_files=None):
         db = SessionLocal()
         try:
             run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
@@ -83,6 +99,10 @@ class TaskService:
                 return None
             run.status = status
             run.output_text = output_text
+            if output_file is not None:
+                run.output_file = output_file
+            if output_files is not None:
+                run.output_files = json.dumps(output_files)
             run.completed_at = datetime.utcnow()
             db.commit()
             db.refresh(run)

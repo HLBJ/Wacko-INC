@@ -5,12 +5,13 @@ from database.models import Project
 class ProjectService:
 
     @staticmethod
-    def create_project(name, description):
+    def create_project(name, description, project_path: str = ""):
         db = SessionLocal()
         try:
             project = Project(
                 name=name,
                 description=description,
+                project_path=project_path or "",
                 status="ACTIVE"
             )
             db.add(project)
