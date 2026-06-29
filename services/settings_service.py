@@ -10,6 +10,13 @@ DEFAULT_SETTINGS = {
     "max_autopilot_cycles": "8",
     "local_only": "true",
     "auto_save_ceo_reports": "true",
+    "email_dry_run": "true",
+    "admin_email": os.getenv("ADMIN_EMAIL", ""),
+    "smtp_host": os.getenv("SMTP_HOST", ""),
+    "smtp_port": os.getenv("SMTP_PORT", "587"),
+    "smtp_username": os.getenv("SMTP_USERNAME", ""),
+    "smtp_password": os.getenv("SMTP_PASSWORD", ""),
+    "smtp_from_email": os.getenv("SMTP_FROM_EMAIL", ""),
 }
 
 
@@ -20,12 +27,12 @@ def _serialize(value) -> str:
 
 
 def _typed(key: str, value: str):
-    if key in {"max_fix_attempts", "max_autopilot_cycles"}:
+    if key in {"max_fix_attempts", "max_autopilot_cycles", "smtp_port"}:
         try:
             return int(value)
         except (TypeError, ValueError):
             return int(DEFAULT_SETTINGS[key])
-    if key in {"local_only", "auto_save_ceo_reports"}:
+    if key in {"local_only", "auto_save_ceo_reports", "email_dry_run"}:
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
     return value
 

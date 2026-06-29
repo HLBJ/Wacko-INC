@@ -8,6 +8,8 @@ from services.orchestrator import run_task
 from services.project_service import ProjectService
 from services.project_reader import format_project_context, read_project_context
 from services.project_templates import seed_project_template, template_for
+from services.roadmap_service import ensure_project_roadmap
+from services.system_blueprint import infer_domain
 from services.task_service import TaskService
 
 
@@ -51,6 +53,104 @@ DEFAULT_TASKS = [
 ]
 
 
+DOMAIN_TASKS = {
+    "crm": [
+        {
+            "title": "Design CRM contact and lead workflows",
+            "description": "Define contacts, leads, pipeline stages, activities, follow-ups, and reporting needs.",
+            "assigned_agent": "manager",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Build CRM backend data model and API",
+            "description": "Create the backend entities, API endpoints, validation, and service boundaries for CRM workflows.",
+            "assigned_agent": "backend",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Design CRM user interface",
+            "description": "Create screens for contacts, leads, pipeline boards, activity history, and dashboard metrics.",
+            "assigned_agent": "frontend",
+            "priority": "HIGH",
+        },
+    ],
+    "booking": [
+        {
+            "title": "Design booking and availability rules",
+            "description": "Define calendars, time slots, availability, appointment statuses, reminders, and cancellation rules.",
+            "assigned_agent": "manager",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Build booking backend and API",
+            "description": "Create appointment, customer, availability, and reminder endpoints with validation.",
+            "assigned_agent": "backend",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Design booking user experience",
+            "description": "Create customer booking flow, staff calendar views, and appointment management screens.",
+            "assigned_agent": "frontend",
+            "priority": "HIGH",
+        },
+    ],
+    "commerce": [
+        {
+            "title": "Design commerce workflows",
+            "description": "Define catalog, cart, checkout, orders, payments, invoices, and fulfilment workflows.",
+            "assigned_agent": "manager",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Build commerce backend and data model",
+            "description": "Create product, customer, order, payment status, and invoice structures and APIs.",
+            "assigned_agent": "backend",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Design commerce storefront and admin UI",
+            "description": "Create catalog browsing, checkout, order history, and product management screens.",
+            "assigned_agent": "frontend",
+            "priority": "HIGH",
+        },
+    ],
+    "support": [
+        {
+            "title": "Design support operations workflow",
+            "description": "Define tickets, categories, assignment, reply drafts, escalation rules, and knowledge base behavior.",
+            "assigned_agent": "manager",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Build support backend and ticket APIs",
+            "description": "Create ticket, reply, knowledge article, notification, and escalation endpoints.",
+            "assigned_agent": "backend",
+            "priority": "HIGH",
+        },
+        {
+            "title": "Design support inbox UI",
+            "description": "Create ticket list, ticket detail, reply draft, knowledge search, and escalation screens.",
+            "assigned_agent": "frontend",
+            "priority": "HIGH",
+        },
+    ],
+}
+
+
+def fallback_tasks_for_goal(goal: str) -> list[dict]:
+    domain = infer_domain(goal)
+    tasks = [*DOMAIN_TASKS.get(domain, DEFAULT_TASKS[:3])]
+    tasks.extend(DEFAULT_TASKS[3:])
+    seen = set()
+    unique = []
+    for task in tasks:
+        if task["title"] in seen:
+            continue
+        seen.add(task["title"])
+        unique.append(task)
+    return unique
+
+
 def submit_company_goal(
     goal: str,
     auto_start: bool = True,
@@ -64,6 +164,7 @@ def submit_company_goal(
         plan["project_description"],
         project_path=template_result["project_dir"],
     )
+    ensure_project_roadmap(project.id)
 
     planning_task = TaskService.create_task(
         project.id,
@@ -372,7 +473,7 @@ def fallback_plan(goal: str, manager_output: str) -> dict:
         "project_name": goal.strip()[:80] or "AI Company Project",
         "project_description": goal,
         "manager_summary": summary,
-        "tasks": DEFAULT_TASKS,
+        "tasks": fallback_tasks_for_goal(goal),
     }
 
 

@@ -1,5 +1,8 @@
 from database.db import SessionLocal
 from database.models import SupportTicket
+from services.email_service import queue_email
+from services.knowledge_service import search_articles
+from services.settings_service import get_settings
 from services.task_service import TaskService
 
 
@@ -29,26 +32,31 @@ def classify_ticket(subject: str, body: str) -> dict:
     }
 
 
-def draft_reply(ticket: SupportTicket, category: str) -> str:
+def draft_reply(ticket: SupportTicket, category: str, knowledge_matches: list[dict] | None = None) -> str:
     greeting = "Hi"
     subject = ticket.subject or "your request"
+    knowledge_matches = knowledge_matches or []
+    kb_note = ""
+    if knowledge_matches:
+        top = knowledge_matches[0]
+        kb_note = f"\n\nThis may help:\n{top['title']}\n{top['body'][:1000]}"
     if category in {"BUG", "ACCESS", "SECURITY", "PERFORMANCE", "UI"}:
         return (
             f"{greeting},\n\n"
             f"Thanks for reporting this. We have logged your request about \"{subject}\" and will investigate it. "
             "If you can share screenshots, steps to reproduce, or the time the issue happened, that will help us resolve it faster.\n\n"
-            "Regards,\nSupport"
+            f"{kb_note}\n\nRegards,\nSupport"
         )
     if category == "FEATURE":
         return (
             f"{greeting},\n\n"
             f"Thanks for the suggestion about \"{subject}\". We have logged it for product review and will consider it for a future update.\n\n"
-            "Regards,\nSupport"
+            f"{kb_note}\n\nRegards,\nSupport"
         )
     return (
         f"{greeting},\n\n"
         f"Thanks for contacting us about \"{subject}\". We have received your message and will respond as soon as possible.\n\n"
-        "Regards,\nSupport"
+        f"{kb_note}\n\nRegards,\nSupport"
     )
 
 
@@ -64,7 +72,30 @@ def create_ticket(project_id: int | None, sender_email: str, subject: str, body:
         db.add(ticket)
         db.commit()
         db.refresh(ticket)
-        return ticket
+        ticket_id = ticket.id
+    finally:
+        db.close()
+
+    settings = get_settings()
+    admin_email = settings.get("admin_email")
+    if admin_email:
+        queue_email(
+            to_email=admin_email,
+            subject=f"New support ticket #{ticket_id}: {subject}",
+            body=(
+                f"A new support ticket was created.\n\n"
+                f"Ticket: #{ticket_id}\n"
+                f"From: {sender_email or 'Unknown'}\n"
+                f"Subject: {subject}\n\n"
+                f"{body}"
+            ),
+            project_id=project_id,
+            support_ticket_id=ticket_id,
+        )
+
+    db = SessionLocal()
+    try:
+        return db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
     finally:
         db.close()
 
@@ -89,10 +120,11 @@ def triage_ticket(ticket_id: int):
         if ticket is None:
             return None
         classification = classify_ticket(ticket.subject, ticket.body)
+        knowledge_matches = search_articles(f"{ticket.subject}\n{ticket.body}", ticket.project_id, limit=3)
         ticket.category = classification["category"]
         ticket.priority = classification["priority"]
         ticket.status = "TRIAGED"
-        ticket.suggested_reply = draft_reply(ticket, classification["category"])
+        ticket.suggested_reply = draft_reply(ticket, classification["category"], knowledge_matches)
         db.commit()
         db.refresh(ticket)
         return ticket
@@ -146,7 +178,8 @@ def escalate_ticket(ticket_id: int):
         ticket.status = "ESCALATED"
         ticket.created_task_id = task.id
         if not ticket.suggested_reply:
-            ticket.suggested_reply = draft_reply(ticket, classification["category"])
+            knowledge_matches = search_articles(f"{ticket.subject}\n{ticket.body}", ticket.project_id, limit=3)
+            ticket.suggested_reply = draft_reply(ticket, classification["category"], knowledge_matches)
         db.commit()
         db.refresh(ticket)
         return {"ticket": ticket, "task": task, "error": None}

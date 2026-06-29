@@ -26,6 +26,8 @@ def ensure_schema():
             connection.execute(text("ALTER TABLE agent_runs ADD COLUMN branch_name VARCHAR DEFAULT ''"))
         if "branch_name" not in task_columns:
             connection.execute(text("ALTER TABLE tasks ADD COLUMN branch_name VARCHAR DEFAULT ''"))
+        if "milestone_id" not in task_columns:
+            connection.execute(text("ALTER TABLE tasks ADD COLUMN milestone_id INTEGER"))
         if "build_runs" in tables and "branch_name" not in build_run_columns:
             connection.execute(text("ALTER TABLE build_runs ADD COLUMN branch_name VARCHAR DEFAULT ''"))
         if "jobs" in tables and "retry_of_job_id" not in job_columns:

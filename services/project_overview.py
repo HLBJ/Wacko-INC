@@ -2,7 +2,7 @@ from pathlib import Path
 
 from agents.registry import AGENT_PROFILES
 from database.db import SessionLocal
-from database.models import AgentRun, Approval, BuildRun, Job, Project, SupportTicket, Task
+from database.models import AgentRun, Approval, BuildRun, Job, Milestone, Project, SupportTicket, Task
 from services.architecture_contract import detect_stack_from_path
 from services.file_writer import resolve_output_dir
 from services.project_quality import audit_python_project
@@ -50,6 +50,7 @@ def recommended_next_action(overview: dict) -> dict:
     latest_build = overview.get("latest_build") or {}
     quality = overview.get("quality") or {}
     security = overview.get("security") or {}
+    support_counts = overview.get("support_counts") or {}
 
     if latest_job.get("status") in {"PENDING", "RUNNING"}:
         return {
@@ -72,6 +73,22 @@ def recommended_next_action(overview: dict) -> dict:
             "workflow": "refresh_architecture",
             "label": "Create architecture contract",
             "reason": "Agents need a shared architecture contract before coordinated edits.",
+            "can_run": True,
+        }
+
+    if not overview.get("blueprint_ready"):
+        return {
+            "workflow": "refresh_blueprint",
+            "label": "Create system blueprint",
+            "reason": "Agents need a system blueprint that describes the product domain and expected modules.",
+            "can_run": True,
+        }
+
+    if not overview.get("milestone_total"):
+        return {
+            "workflow": "refresh_roadmap",
+            "label": "Create project roadmap",
+            "reason": "The project needs release milestones before delivery can be managed like a software company.",
             "can_run": True,
         }
 
@@ -109,6 +126,15 @@ def recommended_next_action(overview: dict) -> dict:
             "workflow": "release_check",
             "label": "Review pending approvals",
             "reason": f"{overview['pending_approvals']} approval(s) need CEO review.",
+            "can_run": True,
+        }
+
+    open_support = sum(count for status, count in support_counts.items() if status != "CLOSED")
+    if open_support:
+        return {
+            "workflow": "release_check",
+            "label": "Review support tickets",
+            "reason": f"{open_support} support ticket(s) are still open.",
             "can_run": True,
         }
 
@@ -195,9 +221,19 @@ def project_overview(project_id: int, ignore_job_id: int | None = None) -> dict 
         support_counts: dict[str, int] = {}
         for (status,) in support_rows:
             support_counts[status] = support_counts.get(status, 0) + 1
+        milestone_rows = db.query(Milestone.status).filter(Milestone.project_id == project_id).all()
+        milestone_counts: dict[str, int] = {}
+        for (status,) in milestone_rows:
+            milestone_counts[status] = milestone_counts.get(status, 0) + 1
+        milestones = db.query(Milestone).filter(Milestone.project_id == project_id).order_by(Milestone.sort_order).all()
+        milestone_task_counts = {}
+        for task in tasks:
+            if task.milestone_id:
+                milestone_task_counts[task.milestone_id] = milestone_task_counts.get(task.milestone_id, 0) + 1
 
         root = Path(_project_path(project))
         architecture_ready = (root / ".wacko" / "architecture.json").exists() and (root / "ARCHITECTURE.md").exists()
+        blueprint_ready = (root / ".wacko" / "system_blueprint.json").exists() and (root / "SYSTEM_BLUEPRINT.md").exists()
         stack = detect_stack_from_path(str(root)) if root.exists() else "unknown"
 
         summary = {
@@ -213,6 +249,7 @@ def project_overview(project_id: int, ignore_job_id: int | None = None) -> dict 
             "project_exists": root.exists(),
             "stack": stack,
             "architecture_ready": architecture_ready,
+            "blueprint_ready": blueprint_ready,
             "task_counts": task_counts,
             "task_total": sum(task_counts.values()),
             "pending_approvals": pending_approvals,
@@ -221,6 +258,18 @@ def project_overview(project_id: int, ignore_job_id: int | None = None) -> dict 
             "agent_workload": _agent_workload(tasks, latest_runs),
             "support_counts": support_counts,
             "support_total": sum(support_counts.values()),
+            "milestone_counts": milestone_counts,
+            "milestone_total": sum(milestone_counts.values()),
+            "milestones": [
+                {
+                    "id": milestone.id,
+                    "name": milestone.name,
+                    "status": milestone.status,
+                    "sort_order": milestone.sort_order,
+                    "task_count": milestone_task_counts.get(milestone.id, 0),
+                }
+                for milestone in milestones
+            ],
         }
     finally:
         db.close()

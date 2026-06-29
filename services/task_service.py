@@ -14,7 +14,8 @@ class TaskService:
         description,
         assigned_agent="manager",
         priority="MEDIUM",
-        requires_approval=True
+        requires_approval=True,
+        milestone_id=None,
     ):
         db = SessionLocal()
         try:
@@ -24,7 +25,8 @@ class TaskService:
                 description=description,
                 assigned_agent=assigned_agent,
                 priority=priority,
-                requires_approval=1 if requires_approval else 0
+                requires_approval=1 if requires_approval else 0,
+                milestone_id=milestone_id,
             )
             db.add(task)
             db.commit()

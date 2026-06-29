@@ -8,6 +8,10 @@ A local-first control panel for running a small AI software company from one mac
 - Automatically create a project and delegated specialist tasks.
 - Automatically start specialist agents after planning.
 - Seed new projects from stack-aware templates: Auto, FastAPI, Vue, FastAPI + Vue, or .NET API.
+- Generate stack-independent system blueprints for any software domain, not only support/helpdesk projects.
+- Generate and save project briefs so agents have a product-level description for any kind of system.
+- Create project roadmaps with release milestones for MVP, domain workflow, hardening, and release candidate stages.
+- Assign tasks to roadmap milestones and save `ROADMAP.md` into project folders.
 - Ask agents to study and update an existing project folder.
 - Create projects.
 - Create tasks and assign them to specialist agents.
@@ -25,6 +29,15 @@ A local-first control panel for running a small AI software company from one mac
 - Use a Project Command Center with Autopilot, Auto Next Step, Full Cycle, Build Until Pass, health checks, and release readiness checks.
 - Show each agent department's project workload in the command center.
 - Check Ollama/model readiness before starting workflows that need AI generation.
+- Manage company settings for default automation behavior.
+- Track startup opportunities, score them, validate them, and convert them into software projects.
+- Track basic startup finances with revenue, expenses, and profit summary.
+- Track startup/product metrics such as leads, demos, users, conversions, and support volume.
+- Create support tickets, triage them, draft replies, and escalate product issues into agent tasks.
+- Maintain a local knowledge base that support triage can use for suggested replies.
+- Queue email notifications in a local outbox. Email is dry-run by default until SMTP is configured.
+- Generate per-project CEO reports and company-wide CEO digests.
+- Create local SQLite backups before risky experiments.
 - Track agent runs and outputs.
 - Require CEO approval before outputs are treated as done.
 - Approve or reject completed work from the dashboard.

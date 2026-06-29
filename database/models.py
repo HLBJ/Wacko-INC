@@ -26,6 +26,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    milestone_id = Column(Integer, ForeignKey("milestones.id"), nullable=True)
     title = Column(String, nullable=False)
     description = Column(Text, default="")
     status = Column(String, default="BACKLOG")
@@ -39,6 +40,20 @@ class Task(Base):
     project = relationship("Project", back_populates="tasks")
     runs = relationship("AgentRun", back_populates="task", cascade="all, delete-orphan")
     approvals = relationship("Approval", back_populates="task", cascade="all, delete-orphan")
+
+
+class Milestone(Base):
+    __tablename__ = "milestones"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    name = Column(String, default="")
+    goal = Column(Text, default="")
+    status = Column(String, default="PLANNED")
+    sort_order = Column(Integer, default=0)
+    acceptance_criteria = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class AgentRun(Base):
@@ -159,3 +174,75 @@ class SupportTicket(Base):
     created_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class KnowledgeArticle(Base):
+    __tablename__ = "knowledge_articles"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    title = Column(String, default="")
+    body = Column(Text, default="")
+    tags = Column(Text, default="")
+    status = Column(String, default="ACTIVE")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EmailOutbox(Base):
+    __tablename__ = "email_outbox"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    support_ticket_id = Column(Integer, ForeignKey("support_tickets.id"), nullable=True)
+    to_email = Column(String, default="")
+    subject = Column(String, default="")
+    body = Column(Text, default="")
+    status = Column(String, default="QUEUED")
+    error_text = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, nullable=True)
+
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String, default="")
+    problem = Column(Text, default="")
+    target_customer = Column(String, default="")
+    proposed_solution = Column(Text, default="")
+    status = Column(String, default="IDEA")
+    priority_score = Column(Integer, default=0)
+    validation_notes = Column(Text, default="")
+    created_project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class FinanceEntry(Base):
+    __tablename__ = "finance_entries"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    entry_type = Column(String, default="EXPENSE")
+    category = Column(String, default="")
+    description = Column(Text, default="")
+    amount_cents = Column(Integer, default=0)
+    currency = Column(String, default="ZAR")
+    occurred_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MetricEntry(Base):
+    __tablename__ = "metric_entries"
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    metric_name = Column(String, default="")
+    metric_value = Column(Integer, default=0)
+    unit = Column(String, default="count")
+    source = Column(String, default="manual")
+    notes = Column(Text, default="")
+    recorded_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)

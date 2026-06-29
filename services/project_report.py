@@ -26,6 +26,10 @@ def build_ceo_report(project_id: int) -> dict | None:
         blockers.append("Project path does not exist.")
     if not overview.get("architecture_ready"):
         blockers.append("Architecture contract is missing.")
+    if not overview.get("blueprint_ready"):
+        blockers.append("System blueprint is missing.")
+    if not overview.get("milestone_total"):
+        blockers.append("Project roadmap is missing.")
     if latest_build.get("status") != "PASSED":
         blockers.append("Latest build/test run has not passed.")
     if quality.get("status") != "PASS":
@@ -55,6 +59,8 @@ def build_ceo_report(project_id: int) -> dict | None:
         "## Readiness",
         f"- Project exists: {'Yes' if overview.get('project_exists') else 'No'}",
         f"- Architecture contract: {'Ready' if overview.get('architecture_ready') else 'Missing'}",
+        f"- System blueprint: {'Ready' if overview.get('blueprint_ready') else 'Missing'}",
+        f"- Roadmap milestones: {overview.get('milestone_total', 0)}",
         f"- Latest build: {latest_build.get('status') or 'NONE'}",
         f"- Quality: {quality.get('status') or 'UNKNOWN'} ({len(quality.get('findings', []))} finding(s))",
         f"- Security: {security.get('status') or 'UNKNOWN'} ({len(security.get('findings', []))} finding(s))",
@@ -72,6 +78,10 @@ def build_ceo_report(project_id: int) -> dict | None:
 
     task_counts = overview.get("task_counts") or {}
     lines.extend(_line_items([f"{status}: {count}" for status, count in sorted(task_counts.items())]))
+
+    lines.extend(["", "## Roadmap Summary"])
+    milestone_counts = overview.get("milestone_counts") or {}
+    lines.extend(_line_items([f"{status}: {count}" for status, count in sorted(milestone_counts.items())]))
 
     lines.extend(["", "## Support Summary"])
     support_counts = overview.get("support_counts") or {}

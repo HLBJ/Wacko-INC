@@ -3,6 +3,11 @@ const state = {
   tasks: [],
   agents: {},
   templates: {},
+  opportunities: [],
+  financeEntries: [],
+  financeSummary: null,
+  metricEntries: [],
+  metricSummary: null,
   approvals: [],
   runs: [],
   buildRuns: [],
@@ -11,6 +16,10 @@ const state = {
   jobEvents: [],
   settings: {},
   supportTickets: [],
+  knowledgeArticles: [],
+  emailOutbox: [],
+  backups: [],
+  milestones: [],
   fileBrowser: {
     projectId: null,
     projectPath: "",
@@ -24,7 +33,8 @@ const state = {
   commandProjectId: null,
   commandOverview: null,
   commandMessage: "",
-  ceoReport: ""
+  ceoReport: "",
+  companyDigest: ""
 };
 
 const api = async (path, options = {}) => {
@@ -101,6 +111,11 @@ const prettyText = (value) => {
   }
 };
 
+const milestoneName = (milestoneId) => {
+  const milestone = state.milestones.find(item => item.id === milestoneId);
+  return milestone ? `${milestone.sort_order}. ${milestone.name}` : "";
+};
+
 const relativeOutputPath = (absolutePath) => {
   const filePath = String(absolutePath || "").replace(/\\/g, "/");
   const projectPath = String(state.fileBrowser.projectPath || "").replace(/\\/g, "/");
@@ -153,6 +168,10 @@ const renderProjects = () => {
   const securityProjectSelect = document.querySelector("#securityProjectSelect");
   const commandProjectSelect = document.querySelector("#commandProjectSelect");
   const supportProjectSelect = document.querySelector("#supportTicketForm [name='project_id']");
+  const knowledgeProjectSelect = document.querySelector("#knowledgeForm [name='project_id']");
+  const financeProjectSelect = document.querySelector("#financeForm [name='project_id']");
+  const metricProjectSelect = document.querySelector("#metricForm [name='project_id']");
+  const roadmapProjectSelect = document.querySelector("#roadmapProjectSelect");
 
   list.innerHTML = state.projects.length
     ? state.projects.map(project => `
@@ -212,6 +231,108 @@ const renderProjects = () => {
 
   supportProjectSelect.innerHTML = `<option value="">No project</option>` + state.projects.map(project => `
     <option value="${project.id}">${escapeHtml(project.name)}</option>
+  `).join("");
+
+  knowledgeProjectSelect.innerHTML = `<option value="">Global</option>` + state.projects.map(project => `
+    <option value="${project.id}">${escapeHtml(project.name)}</option>
+  `).join("");
+
+  financeProjectSelect.innerHTML = `<option value="">Company-wide</option>` + state.projects.map(project => `
+    <option value="${project.id}">${escapeHtml(project.name)}</option>
+  `).join("");
+
+  metricProjectSelect.innerHTML = `<option value="">Company-wide</option>` + state.projects.map(project => `
+    <option value="${project.id}">${escapeHtml(project.name)}</option>
+  `).join("");
+
+  roadmapProjectSelect.innerHTML = state.projects.map(project => `
+    <option value="${project.id}">${escapeHtml(project.name)}</option>
+  `).join("");
+  if (state.commandProjectId) {
+    roadmapProjectSelect.value = String(state.commandProjectId);
+  }
+  renderTaskMilestoneOptions();
+};
+
+const renderOpportunities = () => {
+  const list = document.querySelector("#opportunitiesList");
+  list.innerHTML = state.opportunities.length
+    ? state.opportunities.map(item => `
+      <article class="item">
+        <h4>${escapeHtml(item.title)}</h4>
+        <p class="meta">
+          <span class="badge">${escapeHtml(item.status)}</span>
+          <span class="badge ${item.priority_score >= 75 ? "" : "warn"}">${escapeHtml(item.priority_score)}/100</span>
+          ${item.created_project_id ? `Project #${item.created_project_id}` : ""}
+        </p>
+        <p class="meta">${escapeHtml(item.target_customer || "No target customer yet")}</p>
+        <p>${escapeHtml(item.problem || "No problem statement yet.")}</p>
+        ${item.proposed_solution ? `<p>${escapeHtml(item.proposed_solution)}</p>` : ""}
+        ${item.validation_notes ? `<pre>${escapeHtml(item.validation_notes)}</pre>` : ""}
+        <div class="actions">
+          ${["IDEA", "VALIDATION", "APPROVED", "REJECTED"].map(status => `
+            <button type="button" class="secondary" onclick="setOpportunityStatus(${item.id}, '${status}')">${status}</button>
+          `).join("")}
+          ${item.status !== "CONVERTED" ? `<button type="button" onclick="convertOpportunity(${item.id})">Build Project</button>` : ""}
+        </div>
+      </article>
+    `).join("")
+    : "<p class='meta'>No startup opportunities yet.</p>";
+};
+
+const renderFinance = () => {
+  const summary = document.querySelector("#financeSummary");
+  const list = document.querySelector("#financeEntriesList");
+  const finance = state.financeSummary || {};
+  summary.innerHTML = `
+    <div class="command-grid">
+      <div class="status-tile"><span>Revenue</span><strong>${escapeHtml(finance.currency || "ZAR")} ${Number(finance.revenue || 0).toFixed(2)}</strong></div>
+      <div class="status-tile"><span>Expenses</span><strong>${escapeHtml(finance.currency || "ZAR")} ${Number(finance.expenses || 0).toFixed(2)}</strong></div>
+      <div class="status-tile"><span>Profit</span><strong>${escapeHtml(finance.currency || "ZAR")} ${Number(finance.profit || 0).toFixed(2)}</strong></div>
+    </div>
+  `;
+  list.innerHTML = state.financeEntries.length
+    ? state.financeEntries.map(entry => `
+      <article class="item">
+        <h4>${escapeHtml(entry.entry_type)} - ${escapeHtml(entry.currency)} ${(Number(entry.amount_cents || 0) / 100).toFixed(2)}</h4>
+        <p class="meta">${escapeHtml(entry.category || "Uncategorized")} ${entry.project_id ? `Project #${entry.project_id}` : "Company-wide"}</p>
+        <p>${escapeHtml(entry.description || "")}</p>
+      </article>
+    `).join("")
+    : "<p class='meta'>No finance entries yet.</p>";
+};
+
+const renderMetrics = () => {
+  const summary = document.querySelector("#metricSummary");
+  const list = document.querySelector("#metricEntriesList");
+  const metrics = state.metricSummary || {};
+  const totals = metrics.totals || {};
+  summary.innerHTML = Object.keys(totals).length
+    ? `<div class="command-grid">${Object.entries(totals).map(([name, value]) => `
+        <div class="status-tile"><span>${escapeHtml(name)}</span><strong>${escapeHtml(value)}</strong></div>
+      `).join("")}</div>`
+    : "<p class='meta'>No metric totals yet.</p>";
+  list.innerHTML = state.metricEntries.length
+    ? state.metricEntries.map(entry => `
+      <article class="item">
+        <h4>${escapeHtml(entry.metric_name)}: ${escapeHtml(entry.metric_value)} ${escapeHtml(entry.unit)}</h4>
+        <p class="meta">${entry.project_id ? `Project #${entry.project_id}` : "Company-wide"} - ${escapeHtml(entry.source || "manual")}</p>
+        <p>${escapeHtml(entry.notes || "")}</p>
+      </article>
+    `).join("")
+    : "<p class='meta'>No metric entries yet.</p>";
+};
+
+const renderTaskMilestoneOptions = () => {
+  const taskProjectSelect = document.querySelector("#taskForm [name='project_id']");
+  const milestoneSelect = document.querySelector("#taskForm [name='milestone_id']");
+  if (!taskProjectSelect || !milestoneSelect) {
+    return;
+  }
+  const projectId = Number(taskProjectSelect.value || 0);
+  const milestones = state.milestones.filter(item => item.project_id === projectId);
+  milestoneSelect.innerHTML = `<option value="">No milestone</option>` + milestones.map(milestone => `
+    <option value="${milestone.id}">${escapeHtml(milestone.sort_order)}. ${escapeHtml(milestone.name)}</option>
   `).join("");
 };
 
@@ -287,6 +408,13 @@ const renderSettings = () => {
   form.max_autopilot_cycles.value = state.settings.max_autopilot_cycles ?? 8;
   form.local_only.checked = Boolean(state.settings.local_only);
   form.auto_save_ceo_reports.checked = Boolean(state.settings.auto_save_ceo_reports);
+  form.email_dry_run.checked = Boolean(state.settings.email_dry_run);
+  form.admin_email.value = state.settings.admin_email || "";
+  form.smtp_host.value = state.settings.smtp_host || "";
+  form.smtp_port.value = state.settings.smtp_port ?? 587;
+  form.smtp_username.value = state.settings.smtp_username || "";
+  form.smtp_password.value = state.settings.smtp_password || "";
+  form.smtp_from_email.value = state.settings.smtp_from_email || "";
 
   const maxFixInput = document.querySelector("#maxFixAttempts");
   const maxCycleInput = document.querySelector("#maxAutopilotCycles");
@@ -309,6 +437,7 @@ const renderTasks = () => {
           <span class="badge ${task.status === "AWAITING_APPROVAL" ? "warn" : ""}">${escapeHtml(task.status)}</span>
           <span class="badge">${escapeHtml(task.priority)}</span>
           <span class="badge">${escapeHtml(task.assigned_agent)}</span>
+          ${task.milestone_id ? `<span class="badge">${escapeHtml(milestoneName(task.milestone_id))}</span>` : ""}
           ${task.branch_name ? `<span class="badge">${escapeHtml(task.branch_name)}</span>` : ""}
         </p>
         <p>${escapeHtml(task.description || "No details provided.")}</p>
@@ -585,6 +714,7 @@ const renderCommandCenter = () => {
   const nextAction = overview.recommended_next_action || {};
   const agentWorkload = overview.agent_workload || [];
   const supportCounts = overview.support_counts || {};
+  const milestoneCounts = overview.milestone_counts || {};
   const openSupport = Object.entries(supportCounts)
     .filter(([status]) => status !== "CLOSED")
     .reduce((total, [, count]) => total + Number(count || 0), 0);
@@ -608,6 +738,10 @@ const renderCommandCenter = () => {
         <div class="status-tile">
           <span>Architecture</span>
           <strong>${overview.architecture_ready ? "Ready" : "Missing"}</strong>
+        </div>
+        <div class="status-tile">
+          <span>Blueprint</span>
+          <strong>${overview.blueprint_ready ? "Ready" : "Missing"}</strong>
         </div>
         <div class="status-tile">
           <span>Build</span>
@@ -637,6 +771,11 @@ const renderCommandCenter = () => {
           <small>${Object.entries(counts).map(([key, value]) => `${key}: ${value}`).join(" | ") || "No tasks"}</small>
         </div>
         <div class="status-tile">
+          <span>Milestones</span>
+          <strong>${escapeHtml(overview.milestone_total || 0)}</strong>
+          <small>${Object.entries(milestoneCounts).map(([key, value]) => `${key}: ${value}`).join(" | ") || "No milestones"}</small>
+        </div>
+        <div class="status-tile">
           <span>Support</span>
           <strong>${escapeHtml(openSupport)}</strong>
           <small>${Object.entries(supportCounts).map(([key, value]) => `${key}: ${value}`).join(" | ") || "No tickets"}</small>
@@ -654,6 +793,15 @@ const renderCommandCenter = () => {
       </div>
     </article>
   `;
+};
+
+const renderCompanyDigest = () => {
+  const panel = document.querySelector("#companyDigestPanel");
+  if (!panel) {
+    return;
+  }
+  panel.textContent = state.companyDigest || "";
+  panel.style.display = state.companyDigest ? "block" : "none";
 };
 
 const renderJobs = () => {
@@ -725,6 +873,89 @@ const renderSupportTickets = () => {
     : "<p class='meta'>No support tickets yet.</p>";
 };
 
+const renderKnowledgeArticles = () => {
+  const list = document.querySelector("#knowledgeList");
+  list.innerHTML = state.knowledgeArticles.length
+    ? state.knowledgeArticles.map(article => `
+      <article class="item">
+        <h4>${escapeHtml(article.title)}</h4>
+        <p class="meta">
+          <span class="badge">${escapeHtml(article.status)}</span>
+          ${article.project_id ? `Project #${article.project_id}` : "Global"}
+          ${escapeHtml(article.tags || "")}
+        </p>
+        <p>${escapeHtml(article.body)}</p>
+        <div class="actions">
+          <button type="button" class="secondary" onclick="archiveKnowledgeArticle(${article.id})">Archive</button>
+        </div>
+      </article>
+    `).join("")
+    : "<p class='meta'>No knowledge articles yet.</p>";
+};
+
+const renderEmailOutbox = () => {
+  const list = document.querySelector("#emailOutboxList");
+  list.innerHTML = state.emailOutbox.length
+    ? state.emailOutbox.map(email => `
+      <article class="item">
+        <h4>${escapeHtml(email.subject)}</h4>
+        <p class="meta">
+          <span class="badge ${badgeTone(email.status)}">${escapeHtml(email.status)}</span>
+          To: ${escapeHtml(email.to_email)}
+          ${email.project_id ? `Project #${email.project_id}` : ""}
+          ${email.support_ticket_id ? `Ticket #${email.support_ticket_id}` : ""}
+        </p>
+        <div class="actions">
+          ${email.status === "QUEUED" || email.status === "FAILED"
+            ? `<button type="button" class="secondary" onclick="sendEmail(${email.id})">Send</button>`
+            : ""}
+        </div>
+        <pre>${escapeHtml(email.body || "")}</pre>
+        ${email.error_text ? `<pre>${escapeHtml(email.error_text)}</pre>` : ""}
+      </article>
+    `).join("")
+    : "<p class='meta'>No queued emails.</p>";
+};
+
+const renderBackups = () => {
+  const list = document.querySelector("#backupsList");
+  list.innerHTML = state.backups.length
+    ? state.backups.map(backup => `
+      <article class="item">
+        <h4>${escapeHtml(basename(backup.path))}</h4>
+        <p class="meta" style="word-break:break-all">${escapeHtml(backup.path)}</p>
+        <p class="meta">${Math.ceil((backup.size || 0) / 1024)} KB - ${new Date((backup.modified || 0) * 1000).toLocaleString()}</p>
+      </article>
+    `).join("")
+    : "<p class='meta'>No backups yet.</p>";
+};
+
+const renderRoadmap = () => {
+  const list = document.querySelector("#roadmapList");
+  const projectId = Number(document.querySelector("#roadmapProjectSelect")?.value || state.commandProjectId || 0);
+  const milestones = projectId
+    ? state.milestones.filter(item => item.project_id === projectId)
+    : state.milestones;
+  list.innerHTML = milestones.length
+    ? milestones.map(milestone => `
+      <article class="item">
+        <h4>${escapeHtml(milestone.sort_order)}. ${escapeHtml(milestone.name)}</h4>
+        <p class="meta">
+          <span class="badge ${badgeTone(milestone.status)}">${escapeHtml(milestone.status)}</span>
+          Project #${milestone.project_id}
+        </p>
+        <p>${escapeHtml(milestone.goal)}</p>
+        <pre>${escapeHtml(milestone.acceptance_criteria || "")}</pre>
+        <div class="actions">
+          ${["PLANNED", "ACTIVE", "DONE"].map(status => `
+            <button type="button" class="secondary" onclick="updateMilestoneStatus(${milestone.id}, '${status}')">${status}</button>
+          `).join("")}
+        </div>
+      </article>
+    `).join("")
+    : "<p class='meta'>No roadmap milestones yet.</p>";
+};
+
 const renderGitStatus = () => {
   const panel = document.querySelector("#gitStatusPanel");
   const git = state.gitStatus;
@@ -748,18 +979,27 @@ const renderGitStatus = () => {
 };
 
 const refresh = async () => {
-  [state.projects, state.tasks, state.agents, state.templates, state.approvals, state.runs, state.buildRuns, state.jobs, state.jobEvents, state.settings, state.supportTickets] = await Promise.all([
+  [state.projects, state.tasks, state.agents, state.templates, state.opportunities, state.financeEntries, state.financeSummary, state.metricEntries, state.metricSummary, state.approvals, state.runs, state.buildRuns, state.jobs, state.jobEvents, state.settings, state.supportTickets, state.knowledgeArticles, state.emailOutbox, state.backups, state.milestones] = await Promise.all([
     api("/api/projects"),
     api("/api/tasks"),
     api("/api/agents"),
     api("/api/templates"),
+    api("/api/opportunities"),
+    api("/api/finance/entries"),
+    api("/api/finance/summary"),
+    api("/api/metrics/entries"),
+    api("/api/metrics/summary"),
     api("/api/approvals"),
     api("/api/runs"),
     api("/api/build-runs"),
     api("/api/jobs"),
     api("/api/job-events"),
     api("/api/settings"),
-    api("/api/support-tickets")
+    api("/api/support-tickets"),
+    api("/api/knowledge-articles"),
+    api("/api/email/outbox"),
+    api("/api/backups"),
+    api("/api/milestones")
   ]);
 
   if (!state.projects.some(project => project.id === state.commandProjectId)) {
@@ -777,6 +1017,10 @@ const refresh = async () => {
   }
 
   renderProgress();
+  renderCompanyDigest();
+  renderOpportunities();
+  renderFinance();
+  renderMetrics();
   renderProjects();
   renderCommandCenter();
   renderAgents();
@@ -792,6 +1036,10 @@ const refresh = async () => {
   renderGitStatus();
   renderJobs();
   renderSupportTickets();
+  renderKnowledgeArticles();
+  renderEmailOutbox();
+  renderBackups();
+  renderRoadmap();
   renderFileBrowser();
   await renderOllamaStatus();
   await renderGatewayStatus();
@@ -881,7 +1129,7 @@ window.runCommandWorkflow = async (workflow) => {
         workflow,
         max_fix_attempts: maxFixAttempts,
         max_cycles: maxCycles,
-        overwrite_architecture: workflow === "refresh_architecture"
+        overwrite_architecture: workflow === "refresh_architecture" || workflow === "refresh_blueprint"
       })
     });
 
@@ -938,6 +1186,34 @@ window.saveCeoReport = async () => {
   }
 };
 
+window.saveProjectBrief = async () => {
+  const projectId = Number(document.querySelector("#commandProjectSelect").value || state.commandProjectId);
+  if (!projectId) {
+    return;
+  }
+  const result = await api(`/api/projects/${projectId}/brief/save`, { method: "POST" });
+  state.commandMessage = `Project brief saved: ${result.brief_path}`;
+  renderCommandCenter();
+  if (state.fileBrowser.projectId === projectId) {
+    await window.browseProjectFiles(projectId);
+  }
+};
+
+window.loadCompanyDigest = async () => {
+  const result = await api("/api/company/digest");
+  state.companyDigest = result.report || "";
+  document.querySelector("#companyDigestStatus").textContent =
+    `${result.ready_projects || 0} ready, ${result.blocked_projects || 0} blocked, ${result.open_opportunities || 0} open opportunities, ${result.open_support || 0} open support tickets.`;
+  renderCompanyDigest();
+};
+
+window.saveCompanyDigest = async () => {
+  const result = await api("/api/company/digest/save", { method: "POST" });
+  state.companyDigest = result.report || "";
+  document.querySelector("#companyDigestStatus").textContent = `Digest saved: ${result.latest_path || result.saved_path}`;
+  renderCompanyDigest();
+};
+
 window.triageSupportTicket = async (ticketId) => {
   await api(`/api/support-tickets/${ticketId}/triage`, { method: "POST" });
   await refresh();
@@ -956,6 +1232,54 @@ window.closeSupportTicket = async (ticketId) => {
   await api(`/api/support-tickets/${ticketId}`, {
     method: "PATCH",
     body: JSON.stringify({ status: "CLOSED" })
+  });
+  await refresh();
+};
+
+window.archiveKnowledgeArticle = async (articleId) => {
+  await api(`/api/knowledge-articles/${articleId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "ARCHIVED" })
+  });
+  await refresh();
+};
+
+window.sendEmail = async (emailId) => {
+  await api(`/api/email/outbox/${emailId}/send`, { method: "POST" });
+  await refresh();
+};
+
+window.sendQueuedEmails = async () => {
+  await api("/api/email/outbox/send-queued", { method: "POST" });
+  await refresh();
+};
+
+window.createBackup = async () => {
+  await api("/api/backups", { method: "POST" });
+  await refresh();
+};
+
+window.setOpportunityStatus = async (opportunityId, status) => {
+  await api(`/api/opportunities/${opportunityId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  });
+  await refresh();
+};
+
+window.convertOpportunity = async (opportunityId) => {
+  try {
+    await api(`/api/opportunities/${opportunityId}/convert`, { method: "POST" });
+    await refresh();
+  } catch (error) {
+    window.alert(error.message);
+  }
+};
+
+window.updateMilestoneStatus = async (milestoneId, status) => {
+  await api(`/api/milestones/${milestoneId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
   });
   await refresh();
 };
@@ -1153,6 +1477,43 @@ document.querySelector("#runSecurityButton").addEventListener("click", async () 
   }
 });
 
+document.querySelector("#loadRoadmapButton").addEventListener("click", async () => {
+  const projectId = Number(document.querySelector("#roadmapProjectSelect").value);
+  if (projectId) {
+    await api(`/api/projects/${projectId}/roadmap`, { method: "POST" });
+    state.commandProjectId = projectId;
+    await refresh();
+    document.querySelector("#roadmapProjectSelect").value = String(projectId);
+    renderRoadmap();
+  }
+});
+
+document.querySelector("#assignRoadmapButton").addEventListener("click", async () => {
+  const projectId = Number(document.querySelector("#roadmapProjectSelect").value);
+  if (projectId) {
+    await api(`/api/projects/${projectId}/roadmap/assign-tasks`, { method: "POST" });
+    await refresh();
+    document.querySelector("#roadmapProjectSelect").value = String(projectId);
+    renderRoadmap();
+  }
+});
+
+document.querySelector("#saveRoadmapButton").addEventListener("click", async () => {
+  const projectId = Number(document.querySelector("#roadmapProjectSelect").value);
+  if (projectId) {
+    const result = await api(`/api/projects/${projectId}/roadmap/save`, { method: "POST" });
+    state.commandMessage = `Roadmap saved: ${result.roadmap_path}`;
+    await refresh();
+    if (state.fileBrowser.projectId === projectId) {
+      await window.browseProjectFiles(projectId);
+    }
+  }
+});
+
+document.querySelector("#roadmapProjectSelect").addEventListener("change", () => {
+  renderRoadmap();
+});
+
 document.querySelector("#clearDatabaseButton").addEventListener("click", async () => {
   const confirmed = window.confirm(
     "Clear all projects, tasks, agent runs, approvals, and execution logs? This cannot be undone."
@@ -1179,7 +1540,14 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
     max_fix_attempts: Number(data.max_fix_attempts || 3),
     max_autopilot_cycles: Number(data.max_autopilot_cycles || 8),
     local_only: form.local_only.checked,
-    auto_save_ceo_reports: form.auto_save_ceo_reports.checked
+    auto_save_ceo_reports: form.auto_save_ceo_reports.checked,
+    email_dry_run: form.email_dry_run.checked,
+    admin_email: data.admin_email || "",
+    smtp_host: data.smtp_host || "",
+    smtp_port: Number(data.smtp_port || 587),
+    smtp_username: data.smtp_username || "",
+    smtp_password: data.smtp_password || "",
+    smtp_from_email: data.smtp_from_email || ""
   };
 
   try {
@@ -1207,6 +1575,24 @@ document.querySelector("#supportTicketForm").addEventListener("submit", async (e
     body: data.body
   };
   await api("/api/support-tickets", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  form.reset();
+  await refresh();
+});
+
+document.querySelector("#knowledgeForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formData(form);
+  const payload = {
+    project_id: data.project_id ? Number(data.project_id) : null,
+    title: data.title,
+    body: data.body,
+    tags: data.tags || ""
+  };
+  await api("/api/knowledge-articles", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -1269,6 +1655,64 @@ document.querySelector("#updateProjectForm").addEventListener("submit", async (e
   }
 });
 
+document.querySelector("#opportunityForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formData(form);
+  await api("/api/opportunities", {
+    method: "POST",
+    body: JSON.stringify({
+      title: data.title,
+      target_customer: data.target_customer || "",
+      problem: data.problem || "",
+      proposed_solution: data.proposed_solution || ""
+    })
+  });
+  form.reset();
+  await refresh();
+});
+
+document.querySelector("#financeForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formData(form);
+  await api("/api/finance/entries", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: data.project_id ? Number(data.project_id) : null,
+      entry_type: data.entry_type || "EXPENSE",
+      amount: Number(data.amount || 0),
+      currency: data.currency || "ZAR",
+      category: data.category || "",
+      description: data.description || ""
+    })
+  });
+  form.reset();
+  form.currency.value = "ZAR";
+  await refresh();
+});
+
+document.querySelector("#metricForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formData(form);
+  await api("/api/metrics/entries", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: data.project_id ? Number(data.project_id) : null,
+      metric_name: data.metric_name,
+      metric_value: Number(data.metric_value || 0),
+      unit: data.unit || "count",
+      source: data.source || "manual",
+      notes: data.notes || ""
+    })
+  });
+  form.reset();
+  form.unit.value = "count";
+  form.source.value = "manual";
+  await refresh();
+});
+
 document.querySelector("#projectForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1286,12 +1730,15 @@ document.querySelector("#taskForm").addEventListener("submit", async (event) => 
   const form = event.currentTarget;
   const data = formData(form);
   data.project_id = Number(data.project_id);
+  data.milestone_id = data.milestone_id ? Number(data.milestone_id) : null;
   data.requires_approval = form.requires_approval.checked;
   await api("/api/tasks", { method: "POST", body: JSON.stringify(data) });
   form.reset();
   form.requires_approval.checked = true;
   await refresh();
 });
+
+document.querySelector("#taskForm [name='project_id']").addEventListener("change", renderTaskMilestoneOptions);
 
 refresh().catch(error => {
   document.body.insertAdjacentHTML(

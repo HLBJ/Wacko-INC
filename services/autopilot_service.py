@@ -3,7 +3,9 @@ from services.architecture_contract import ensure_project_contract
 from services.company_service import run_project_tasks
 from services.project_overview import project_overview
 from services.project_report import build_ceo_report, save_ceo_report
+from services.roadmap_service import assign_tasks_to_milestones, ensure_project_roadmap
 from services.settings_service import get_settings
+from services.system_blueprint import ensure_project_blueprint
 
 
 def _release_summary(project_id: int) -> dict:
@@ -74,6 +76,22 @@ def run_project_autopilot(
             step["result"] = ensure_project_contract(job.project_id, overwrite=False)
             step["status"] = "COMPLETED"
             emit_event("Architecture contract refreshed.")
+            history.append(step)
+            continue
+
+        if workflow == "refresh_blueprint":
+            step["result"] = ensure_project_blueprint(job.project_id, overwrite=False)
+            step["status"] = "COMPLETED"
+            emit_event("System blueprint refreshed.")
+            history.append(step)
+            continue
+
+        if workflow == "refresh_roadmap":
+            step["result"] = ensure_project_roadmap(job.project_id, overwrite=False)
+            assignment = assign_tasks_to_milestones(job.project_id)
+            step["assignment"] = assignment
+            step["status"] = "COMPLETED"
+            emit_event("Project roadmap refreshed.", data={"assignment": assignment})
             history.append(step)
             continue
 

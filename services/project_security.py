@@ -9,7 +9,7 @@ SECRET_PATTERNS = [
     ("HIGH", "Possible private key", re.compile(r"-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----")),
     ("HIGH", "Hardcoded password assignment", re.compile(r"(?i)(password|passwd|pwd)\s*=\s*['\"][^'\"\n]{4,}['\"]")),
     ("HIGH", "Hardcoded API key/token", re.compile(r"(?i)(api[_-]?key|secret|token)\s*=\s*['\"][^'\"\n]{12,}['\"]")),
-    ("MEDIUM", "Placeholder SMTP credential", re.compile(r"(?i)(smtp_password|smtp_username|your-password|your-email@example\.com)")),
+    ("MEDIUM", "Placeholder SMTP credential", re.compile(r"(?i)(smtp_password|smtp_username|smtp_user|smtp_pass|your-password|your-email@example\.com)")),
 ]
 
 DEPENDENCY_WARNINGS = {

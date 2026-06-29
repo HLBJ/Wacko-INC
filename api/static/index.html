@@ -14,8 +14,12 @@
     </div>
     <nav>
       <a href="#projects">Projects</a>
+      <a href="#opportunities">Opportunities</a>
+      <a href="#finance">Finance</a>
+      <a href="#metrics">Metrics</a>
       <a href="#commandCenter">Command</a>
       <a href="#tasks">Tasks</a>
+      <a href="#roadmap">Roadmap</a>
       <a href="#files">Files</a>
       <a href="#quality">Quality</a>
       <a href="#security">Security</a>
@@ -24,6 +28,9 @@
       <a href="#jobs">Jobs</a>
       <a href="#settings">Settings</a>
       <a href="#support">Support</a>
+      <a href="#knowledge">Knowledge</a>
+      <a href="#email">Email</a>
+      <a href="#backups">Backups</a>
       <a href="#agents">Agents</a>
       <a href="#approvals">Approvals</a>
       <a href="#runs">Runs</a>
@@ -81,6 +88,21 @@
       <p class="meta">Loading task progress...</p>
     </section>
 
+    <section id="companyDigest" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Company Digest</h3>
+          <p class="meta">Generate a local CEO summary across all projects.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="secondary" onclick="loadCompanyDigest()">Generate</button>
+          <button type="button" class="secondary" onclick="saveCompanyDigest()">Save</button>
+        </div>
+      </div>
+      <p id="companyDigestStatus" class="meta"></p>
+      <pre id="companyDigestPanel" class="report-panel"></pre>
+    </section>
+
     <section id="commandCenter" class="panel">
       <div class="panel-head">
         <div>
@@ -106,10 +128,13 @@
         <button type="button" onclick="runCommandWorkflow('run_agents')">Run Agents</button>
         <button type="button" onclick="runCommandWorkflow('build_until_pass')">Build Until Pass</button>
         <button type="button" class="secondary" onclick="runCommandWorkflow('refresh_architecture')">Refresh Architecture</button>
+        <button type="button" class="secondary" onclick="runCommandWorkflow('refresh_blueprint')">Refresh Blueprint</button>
+        <button type="button" class="secondary" onclick="runCommandWorkflow('refresh_roadmap')">Refresh Roadmap</button>
         <button type="button" class="secondary" onclick="runCommandWorkflow('health_check')">Quality + Security</button>
         <button type="button" class="secondary" onclick="runCommandWorkflow('release_check')">Release Check</button>
         <button type="button" class="secondary" onclick="loadCeoReport()">CEO Report</button>
         <button type="button" class="secondary" onclick="saveCeoReport()">Save Report</button>
+        <button type="button" class="secondary" onclick="saveProjectBrief()">Save Brief</button>
       </div>
       <p id="commandStatus" class="meta"></p>
       <pre id="ceoReportPanel" class="report-panel"></pre>
@@ -135,6 +160,108 @@
           <span id="updateStatus" class="meta"></span>
         </div>
       </form>
+    </section>
+
+    <section id="opportunities" class="grid two">
+      <form id="opportunityForm" class="panel">
+        <h3>Startup Opportunities</h3>
+        <label>
+          Title
+          <input name="title" required placeholder="Appointment reminders for local salons">
+        </label>
+        <label>
+          Target customer
+          <input name="target_customer" placeholder="Small salons and clinics">
+        </label>
+        <label>
+          Problem
+          <textarea name="problem" rows="5" placeholder="What painful business problem exists?"></textarea>
+        </label>
+        <label>
+          Proposed solution
+          <textarea name="proposed_solution" rows="5" placeholder="Smallest useful product that could solve it"></textarea>
+        </label>
+        <button type="submit">Add Opportunity</button>
+      </form>
+      <div class="panel">
+        <h3>Opportunity Pipeline</h3>
+        <div id="opportunitiesList" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="finance" class="grid two">
+      <form id="financeForm" class="panel">
+        <h3>Startup Finance</h3>
+        <label>
+          Project
+          <select name="project_id"></select>
+        </label>
+        <label>
+          Type
+          <select name="entry_type">
+            <option>REVENUE</option>
+            <option>EXPENSE</option>
+          </select>
+        </label>
+        <label>
+          Amount
+          <input name="amount" type="number" step="0.01" min="0" required>
+        </label>
+        <label>
+          Currency
+          <input name="currency" value="ZAR">
+        </label>
+        <label>
+          Category
+          <input name="category" placeholder="subscription, hosting, marketing">
+        </label>
+        <label>
+          Description
+          <textarea name="description" rows="4"></textarea>
+        </label>
+        <button type="submit">Add Entry</button>
+      </form>
+      <div class="panel">
+        <h3>Finance Summary</h3>
+        <div id="financeSummary" class="stack"></div>
+        <div id="financeEntriesList" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="metrics" class="grid two">
+      <form id="metricForm" class="panel">
+        <h3>Startup Metrics</h3>
+        <label>
+          Project
+          <select name="project_id"></select>
+        </label>
+        <label>
+          Metric
+          <input name="metric_name" required placeholder="leads, demos, users, conversions">
+        </label>
+        <label>
+          Value
+          <input name="metric_value" type="number" step="1" required>
+        </label>
+        <label>
+          Unit
+          <input name="unit" value="count">
+        </label>
+        <label>
+          Source
+          <input name="source" value="manual">
+        </label>
+        <label>
+          Notes
+          <textarea name="notes" rows="4"></textarea>
+        </label>
+        <button type="submit">Add Metric</button>
+      </form>
+      <div class="panel">
+        <h3>Metric Summary</h3>
+        <div id="metricSummary" class="stack"></div>
+        <div id="metricEntriesList" class="stack"></div>
+      </div>
     </section>
 
     <section id="projects" class="grid two">
@@ -177,6 +304,10 @@
           <select name="assigned_agent"></select>
         </label>
         <label>
+          Milestone
+          <select name="milestone_id"></select>
+        </label>
+        <label>
           Priority
           <select name="priority">
             <option>MEDIUM</option>
@@ -199,6 +330,22 @@
         <h3>Tasks</h3>
         <div id="tasksList" class="stack"></div>
       </div>
+    </section>
+
+    <section id="roadmap" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Roadmap</h3>
+          <p class="meta">Release milestones for the selected project.</p>
+        </div>
+        <div class="file-controls">
+          <select id="roadmapProjectSelect" aria-label="Roadmap project"></select>
+          <button id="loadRoadmapButton" type="button" class="secondary">Load Roadmap</button>
+          <button id="assignRoadmapButton" type="button" class="secondary">Assign Tasks</button>
+          <button id="saveRoadmapButton" type="button" class="secondary">Save Roadmap</button>
+        </div>
+      </div>
+      <div id="roadmapList" class="stack"></div>
     </section>
 
     <section id="files" class="panel">
@@ -308,6 +455,34 @@
             <input name="auto_save_ceo_reports" type="checkbox">
             Auto-save CEO reports
           </label>
+          <label class="check">
+            <input name="email_dry_run" type="checkbox">
+            Email dry run
+          </label>
+          <label>
+            Admin email
+            <input name="admin_email" type="email" placeholder="owner@example.com">
+          </label>
+          <label>
+            SMTP host
+            <input name="smtp_host" placeholder="smtp.example.com">
+          </label>
+          <label>
+            SMTP port
+            <input name="smtp_port" type="number" min="1" max="65535">
+          </label>
+          <label>
+            SMTP username
+            <input name="smtp_username" autocomplete="off">
+          </label>
+          <label>
+            SMTP password
+            <input name="smtp_password" type="password" autocomplete="new-password">
+          </label>
+          <label>
+            From email
+            <input name="smtp_from_email" type="email">
+          </label>
         </div>
         <div class="actions">
           <button type="submit">Save Settings</button>
@@ -341,6 +516,55 @@
         <h3>Support Tickets</h3>
         <div id="supportTicketsList" class="stack"></div>
       </div>
+    </section>
+
+    <section id="knowledge" class="grid two">
+      <form id="knowledgeForm" class="panel">
+        <h3>Knowledge Base</h3>
+        <label>
+          Project
+          <select name="project_id"></select>
+        </label>
+        <label>
+          Title
+          <input name="title" required placeholder="How to reset a password">
+        </label>
+        <label>
+          Tags
+          <input name="tags" placeholder="login,password,account">
+        </label>
+        <label>
+          Article
+          <textarea name="body" rows="6" required placeholder="Answer or internal support note"></textarea>
+        </label>
+        <button type="submit">Add Article</button>
+      </form>
+      <div class="panel">
+        <h3>Articles</h3>
+        <div id="knowledgeList" class="stack"></div>
+      </div>
+    </section>
+
+    <section id="email" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Email Outbox</h3>
+          <p class="meta">Queued notifications stay local until SMTP is configured and dry run is disabled.</p>
+        </div>
+        <button type="button" class="secondary" onclick="sendQueuedEmails()">Send Queued</button>
+      </div>
+      <div id="emailOutboxList" class="stack"></div>
+    </section>
+
+    <section id="backups" class="panel">
+      <div class="panel-head">
+        <div>
+          <h3>Backups</h3>
+          <p class="meta">Snapshot the local SQLite database before experiments.</p>
+        </div>
+        <button type="button" class="secondary" onclick="createBackup()">Create Backup</button>
+      </div>
+      <div id="backupsList" class="stack"></div>
     </section>
 
     <section id="agents" class="panel">

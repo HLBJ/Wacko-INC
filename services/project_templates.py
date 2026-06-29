@@ -2,6 +2,7 @@ from pathlib import Path
 
 from services.architecture_contract import contract_for_stack, write_contract
 from services.file_writer import resolve_output_dir, safe_project_path
+from services.system_blueprint import ensure_blueprint
 
 
 PROJECT_TEMPLATES = {
@@ -160,6 +161,7 @@ def seed_project_template(project_name: str, goal: str, stack: str | None, outpu
 
     contract = contract_for_stack(project_name, selected_stack, goal)
     contract_result = write_contract(str(project_dir), contract)
+    blueprint_result = ensure_blueprint(str(project_dir), project_name, goal, selected_stack)
 
     return {
         "stack": selected_stack,
@@ -167,4 +169,5 @@ def seed_project_template(project_name: str, goal: str, stack: str | None, outpu
         "project_dir": str(project_dir),
         "seed_files": written,
         "architecture": contract_result,
+        "blueprint": blueprint_result,
     }

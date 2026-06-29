@@ -8,9 +8,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from agents.registry import AGENT_PROFILES
-from api.schemas import ApprovalDecision, BranchActionCreate, BuildRunCreate, CompanyGoalCreate, GitActionCreate, ProjectCreate, ProjectUpdateCreate, ProjectWorkflowCreate, SettingsUpdate, SupportTicketCreate, SupportTicketUpdate, TaskCreate
+from api.schemas import ApprovalDecision, BranchActionCreate, BuildRunCreate, CompanyGoalCreate, EmailQueueCreate, FinanceEntryCreate, GitActionCreate, KnowledgeArticleCreate, KnowledgeArticleUpdate, MetricEntryCreate, MilestoneUpdate, OpportunityCreate, OpportunityUpdate, ProjectCreate, ProjectUpdateCreate, ProjectWorkflowCreate, SettingsUpdate, SupportTicketCreate, SupportTicketUpdate, TaskCreate
 from database.db import SessionLocal
-from database.models import AgentRun, Approval, BuildRun, Execution, Job, JobEvent, Project, Setting, SupportTicket, Task
+from database.models import AgentRun, Approval, BuildRun, EmailOutbox, Execution, FinanceEntry, Job, JobEvent, KnowledgeArticle, MetricEntry, Milestone, Opportunity, Project, Setting, SupportTicket, Task
 from database.schema import ensure_schema
 from llm import model_preflight, ollama_health
 from services.build_service import list_build_runs, run_project_build
@@ -25,18 +25,28 @@ from services.git_service import status as git_status
 from services.ai_gateway import gateway_health
 from services.approval_service import approval_review_package
 from services.architecture_contract import ensure_project_contract
+from services.backup_service import create_backup, list_backups
+from services.company_report import build_company_digest, save_company_digest
+from services.email_service import list_outbox, queue_email, send_email, send_queued
+from services.finance_service import create_finance_entry, finance_summary, list_finance_entries
 from services.job_service import cancel_job, create_job, get_job, job_payload, list_jobs, set_process_id
 from services.job_event_service import list_job_events
+from services.knowledge_service import create_article, list_articles, search_articles, update_article
+from services.metric_service import create_metric_entry, list_metric_entries, metric_summary
 from services.orchestrator import run_task
+from services.opportunity_service import create_opportunity, list_opportunities, mark_converted, opportunity_goal, update_opportunity
 from services.project_file_service import list_project_files, read_project_file
+from services.project_brief import build_project_brief, save_project_brief
 from services.project_overview import project_overview
 from services.project_quality import audit_python_project
 from services.project_report import build_ceo_report, save_ceo_report
 from services.project_security import scan_project_security
 from services.project_service import ProjectService
 from services.project_templates import list_templates
+from services.roadmap_service import assign_tasks_to_milestones, ensure_project_roadmap, list_milestones, save_project_roadmap, update_milestone
 from services.settings_service import get_settings, update_settings
 from services.support_service import create_ticket, escalate_ticket, list_tickets, triage_ticket, update_ticket
+from services.system_blueprint import ensure_project_blueprint
 from services.task_service import TaskService
 
 
@@ -112,7 +122,7 @@ def update_app_settings(payload: SettingsUpdate):
 def clear_database():
     db = SessionLocal()
     try:
-        for model in (Approval, AgentRun, BuildRun, JobEvent, Job, SupportTicket, Task, Project, Execution, Setting):
+        for model in (Approval, AgentRun, BuildRun, JobEvent, Job, EmailOutbox, FinanceEntry, MetricEntry, SupportTicket, KnowledgeArticle, Milestone, Opportunity, Task, Project, Execution, Setting):
             db.query(model).delete()
         db.commit()
         return {"status": "cleared"}
@@ -138,6 +148,227 @@ def list_agents():
 @app.get("/api/templates")
 def templates():
     return list_templates()
+
+
+@app.post("/api/finance/entries")
+def create_finance(payload: FinanceEntryCreate):
+    return create_finance_entry(
+        amount=payload.amount,
+        entry_type=payload.entry_type,
+        category=payload.category,
+        description=payload.description,
+        currency=payload.currency,
+        project_id=payload.project_id,
+    )
+
+
+@app.get("/api/finance/entries")
+def finance_entries(project_id: int | None = None, currency: str | None = None):
+    return list_finance_entries(project_id=project_id, currency=currency)
+
+
+@app.get("/api/finance/summary")
+def get_finance_summary(project_id: int | None = None, currency: str = "ZAR"):
+    return finance_summary(project_id=project_id, currency=currency)
+
+
+@app.post("/api/metrics/entries")
+def create_metric(payload: MetricEntryCreate):
+    return create_metric_entry(
+        metric_name=payload.metric_name,
+        metric_value=payload.metric_value,
+        unit=payload.unit,
+        source=payload.source,
+        notes=payload.notes,
+        project_id=payload.project_id,
+    )
+
+
+@app.get("/api/metrics/entries")
+def metric_entries(project_id: int | None = None, metric_name: str | None = None):
+    return list_metric_entries(project_id=project_id, metric_name=metric_name)
+
+
+@app.get("/api/metrics/summary")
+def get_metric_summary(project_id: int | None = None):
+    return metric_summary(project_id=project_id)
+
+
+@app.post("/api/opportunities")
+def create_startup_opportunity(payload: OpportunityCreate):
+    return create_opportunity(payload.title, payload.problem, payload.target_customer, payload.proposed_solution)
+
+
+@app.get("/api/opportunities")
+def startup_opportunities(status: str | None = None):
+    return list_opportunities(status=status)
+
+
+@app.patch("/api/opportunities/{opportunity_id}")
+def update_startup_opportunity(opportunity_id: int, payload: OpportunityUpdate):
+    if hasattr(payload, "model_dump"):
+        data = payload.model_dump(exclude_unset=True)
+    else:
+        data = payload.dict(exclude_unset=True)
+    result = update_opportunity(opportunity_id, data)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    return result
+
+
+@app.post("/api/opportunities/{opportunity_id}/convert")
+def convert_opportunity(opportunity_id: int, background_tasks: BackgroundTasks):
+    db = SessionLocal()
+    try:
+        opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+        if opportunity is None:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+        goal = opportunity_goal(opportunity)
+    finally:
+        db.close()
+
+    preflight = model_preflight(["manager"])
+    if not preflight["ok"]:
+        raise HTTPException(status_code=503, detail=preflight)
+
+    result = submit_company_goal(goal, auto_start=False, stack="auto")
+    mark_converted(opportunity_id, result["project"].id)
+    job = create_job(
+        "agent_project_run",
+        "Run project agents from opportunity",
+        result["project"].id,
+        input_text=goal,
+        payload={
+            "skip_task_ids": [result["planning_task"].id],
+            "output_dir": result["project"].project_path,
+        },
+    )
+    start_worker(job.id)
+    result["auto_started"] = True
+    result["job_id"] = job.id
+    return result
+
+
+@app.get("/api/company/digest")
+def company_digest():
+    return build_company_digest()
+
+
+@app.post("/api/company/digest/save")
+def save_digest():
+    return save_company_digest()
+
+
+@app.post("/api/backups")
+def create_database_backup():
+    try:
+        return create_backup()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/backups")
+def backups():
+    return list_backups()
+
+
+@app.post("/api/email/outbox")
+def create_outbox_email(payload: EmailQueueCreate):
+    return queue_email(
+        payload.to_email,
+        payload.subject,
+        payload.body,
+        project_id=payload.project_id,
+        support_ticket_id=payload.support_ticket_id,
+    )
+
+
+@app.get("/api/email/outbox")
+def email_outbox(status: str | None = None, project_id: int | None = None, limit: int = 200):
+    return list_outbox(status=status, project_id=project_id, limit=limit)
+
+
+@app.post("/api/email/outbox/{email_id}/send")
+def send_outbox_email(email_id: int):
+    result = send_email(email_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Email not found")
+    return result
+
+
+@app.post("/api/email/outbox/send-queued")
+def send_queued_outbox():
+    return send_queued()
+
+
+@app.post("/api/knowledge-articles")
+def create_knowledge_article(payload: KnowledgeArticleCreate):
+    return create_article(payload.project_id, payload.title, payload.body, payload.tags)
+
+
+@app.get("/api/knowledge-articles")
+def knowledge_articles(project_id: int | None = None, status: str | None = "ACTIVE"):
+    return list_articles(project_id=project_id, status=status)
+
+
+@app.get("/api/knowledge-articles/search")
+def knowledge_search(q: str, project_id: int | None = None, limit: int = 5):
+    return search_articles(q, project_id=project_id, limit=limit)
+
+
+@app.patch("/api/knowledge-articles/{article_id}")
+def update_knowledge_article(article_id: int, payload: KnowledgeArticleUpdate):
+    if hasattr(payload, "model_dump"):
+        data = payload.model_dump(exclude_unset=True)
+    else:
+        data = payload.dict(exclude_unset=True)
+    result = update_article(article_id, data)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Knowledge article not found")
+    return result
+
+
+@app.get("/api/milestones")
+def milestones(project_id: int | None = None):
+    return list_milestones(project_id=project_id)
+
+
+@app.post("/api/projects/{project_id}/roadmap")
+def create_project_roadmap(project_id: int, overwrite: bool = False):
+    result = ensure_project_roadmap(project_id, overwrite=overwrite)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.post("/api/projects/{project_id}/roadmap/assign-tasks")
+def assign_project_tasks_to_roadmap(project_id: int):
+    result = assign_tasks_to_milestones(project_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.post("/api/projects/{project_id}/roadmap/save")
+def save_roadmap(project_id: int):
+    result = save_project_roadmap(project_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.patch("/api/milestones/{milestone_id}")
+def update_project_milestone(milestone_id: int, payload: MilestoneUpdate):
+    if hasattr(payload, "model_dump"):
+        data = payload.model_dump(exclude_unset=True)
+    else:
+        data = payload.dict(exclude_unset=True)
+    result = update_milestone(milestone_id, data)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    return result
 
 
 @app.post("/api/support-tickets")
@@ -255,6 +486,30 @@ def project_architecture(project_id: int, overwrite: bool = False):
     return result
 
 
+@app.post("/api/projects/{project_id}/blueprint")
+def project_blueprint(project_id: int, overwrite: bool = False):
+    result = ensure_project_blueprint(project_id, overwrite=overwrite)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.get("/api/projects/{project_id}/brief")
+def get_project_brief(project_id: int):
+    result = build_project_brief(project_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.post("/api/projects/{project_id}/brief/save")
+def save_project_brief_endpoint(project_id: int):
+    result = save_project_brief(project_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
 @app.post("/api/projects/{project_id}/workflow")
 def project_workflow(project_id: int, payload: ProjectWorkflowCreate, background_tasks: BackgroundTasks):
     project = ProjectService.get_project(project_id)
@@ -340,6 +595,15 @@ def project_workflow(project_id: int, payload: ProjectWorkflowCreate, background
 
     if workflow == "refresh_architecture":
         result = ensure_project_contract(project_id, overwrite=payload.overwrite_architecture)
+        return {"status": "completed", "workflow": workflow, "requested_workflow": payload.workflow, "result": result}
+
+    if workflow == "refresh_blueprint":
+        result = ensure_project_blueprint(project_id, overwrite=True)
+        return {"status": "completed", "workflow": workflow, "requested_workflow": payload.workflow, "result": result}
+
+    if workflow == "refresh_roadmap":
+        result = ensure_project_roadmap(project_id, overwrite=False)
+        assign_tasks_to_milestones(project_id)
         return {"status": "completed", "workflow": workflow, "requested_workflow": payload.workflow, "result": result}
 
     if workflow == "health_check":
@@ -452,6 +716,7 @@ def create_task(payload: TaskCreate):
         assigned_agent=payload.assigned_agent,
         priority=payload.priority,
         requires_approval=payload.requires_approval,
+        milestone_id=payload.milestone_id,
     )
 
 
